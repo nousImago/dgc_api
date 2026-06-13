@@ -1,7 +1,7 @@
 [project]
 name = "dgc-api"
 version = "0.1.0"
-description = "DGC window-film business API"
+description = "DGC Insurance Core POC API"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
