@@ -1,11 +1,28 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_db, has_permission
-from domain.policy.schema import PremiumRegisterPage
+from domain.policy.schema import PremiumDueSchedule, PremiumRegisterPage
 from services import premium_due as premium_due_service
 
 router = APIRouter()
+
+
+@router.get(
+    "/schedule",
+    response_model=PremiumDueSchedule,
+    dependencies=[Depends(has_permission("policy.read"))],
+)
+async def premium_due_schedule(
+    as_of: date | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> PremiumDueSchedule:
+    """Premium due per month (base/rider/total), in two 12-month views: a rolling
+    window (last 6 + next 6 months) and the calendar year. Each policy's annual
+    premium falls in the month of its payment date (effective-date anniversary)."""
+    return await premium_due_service.premium_due_schedule(db, as_of or date.today())
 
 
 @router.get(

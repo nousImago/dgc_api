@@ -1,3 +1,5 @@
+import calendar
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,8 @@ from domain.policy.schema import (
     PartyPremiumDue,
     PremiumDueCoverageLine,
     PremiumDuePolicy,
+    PremiumDueSchedule,
+    PremiumMonthBucket,
     PremiumRegisterItem,
     PremiumRegisterPage,
 )
@@ -154,4 +158,85 @@ async def premium_register(
         page=page,
         page_size=page_size,
         items=items[start : start + page_size],
+    )
+
+
+def _add_months(d: date, months: int) -> date:
+    m = d.month - 1 + months
+    year = d.year + m // 12
+    month = m % 12 + 1
+    day = min(d.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _anniversary_in(effective: date, start: date, end: date) -> date | None:
+    """The policy's annual payment date (the effective-date anniversary) falling
+    in [start, end), if any. For a window <= 12 months there is at most one."""
+    for year in range(start.year, end.year + 2):
+        day = min(effective.day, calendar.monthrange(year, effective.month)[1])
+        d = date(year, effective.month, day)
+        if start <= d < end:
+            return d
+    return None
+
+
+def _base_rider(lines: list[PremiumDueCoverageLine]) -> tuple[Decimal, Decimal]:
+    base = sum((ln.premium for ln in lines if ln.kind == "base" and ln.premium), _ZERO)
+    rider = sum((ln.premium for ln in lines if ln.kind == "rider" and ln.premium), _ZERO)
+    return base, rider
+
+
+def _month_index(d: date, start: date) -> int:
+    """Whole months from `start` to `d` (start is the first of a month)."""
+    return (d.year - start.year) * 12 + (d.month - start.month)
+
+
+async def premium_due_schedule(
+    session: AsyncSession, as_of: date
+) -> PremiumDueSchedule:
+    """Premium due **per month**, base/rider/total. Each policy's full annual
+    premium lands in the month its payment date (effective-date anniversary)
+    falls in. Two 12-month views: a rolling window (last 6 + next 6 months) and
+    the calendar year."""
+    policies = await policy_repo.list_filtered(session)
+
+    rolling_start = _add_months(date(as_of.year, as_of.month, 1), -6)
+    rolling_end = _add_months(rolling_start, 12)
+    calendar_start = date(as_of.year, 1, 1)
+    calendar_end = date(as_of.year + 1, 1, 1)
+
+    rolling = [[_ZERO, _ZERO] for _ in range(12)]
+    calendar = [[_ZERO, _ZERO] for _ in range(12)]
+
+    for policy in policies:
+        insured = _insured_party(policy)
+        _, lines, _ = await _rate_policy(session, policy, insured)
+        base, rider = _base_rider(lines)
+
+        pay_r = _anniversary_in(policy.effective_date, rolling_start, rolling_end)
+        if pay_r is not None:
+            i = _month_index(pay_r, rolling_start)
+            rolling[i][0] += base
+            rolling[i][1] += rider
+
+        pay_c = _anniversary_in(policy.effective_date, calendar_start, calendar_end)
+        if pay_c is not None:
+            calendar[pay_c.month - 1][0] += base
+            calendar[pay_c.month - 1][1] += rider
+
+    def buckets(start: date, arr: list[list[Decimal]]) -> list[PremiumMonthBucket]:
+        return [
+            PremiumMonthBucket(
+                month=_add_months(start, i),
+                base=arr[i][0],
+                rider=arr[i][1],
+                total=arr[i][0] + arr[i][1],
+            )
+            for i in range(12)
+        ]
+
+    return PremiumDueSchedule(
+        as_of=as_of,
+        rolling=buckets(rolling_start, rolling),
+        calendar=buckets(calendar_start, calendar),
     )

@@ -114,3 +114,20 @@ class PremiumRegisterPage(BaseModel):
     page: int
     page_size: int
     items: list[PremiumRegisterItem] = Field(default_factory=list)
+
+
+# --- Premium-due schedule (per month × base/rider/total) ---
+
+
+class PremiumMonthBucket(BaseModel):
+    month: date  # first day of the month
+    base: Decimal
+    rider: Decimal
+    total: Decimal
+
+
+class PremiumDueSchedule(BaseModel):
+    as_of: date
+    # Two 12-month views, switchable on the client:
+    rolling: list[PremiumMonthBucket]  # rolling window: last 6 + next 6 months
+    calendar: list[PremiumMonthBucket]  # Jan–Dec of the current calendar year
