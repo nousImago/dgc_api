@@ -1,0 +1,45 @@
+{{- if .Values.fluentbit.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dgc-chart.fullname" . }}-fluentbit
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dgc-chart.labels" . | nindent 4 }}
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         10
+        Daemon        Off
+        Log_Level     warn
+        Parsers_File  parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/app/api.log
+        Parser            json
+        Tag               api
+        Refresh_Interval  5
+        Skip_Long_Lines   On
+
+    [OUTPUT]
+        Name              s3
+        Match             *
+        bucket            ${LOG_BUCKET}
+        endpoint          ${MINIO_ENDPOINT}
+        access_key_id     ${MINIO_ACCESS_KEY}
+        secret_access_key ${MINIO_SECRET_KEY}
+        region            us-east-1
+        force_path_style  true
+        s3_key_format     /logs/api/%Y/%m/%d/%H%M%S
+        use_put_object    On
+        total_file_size   10M
+        upload_timeout    5m
+
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+{{- end }}

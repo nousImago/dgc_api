@@ -1,0 +1,341 @@
+def gitBranch = 'develop'
+def cmd = ''
+def mode = 'develop'
+def tag = 'latest'
+def gitRevision = ''
+def workspace = ''
+def cloudName = 'kubernetes'   // ตั้งค่าค่าเริ่มต้น  //cluster name config in web jenkins
+def kubeCredToUse = ''         // จะใช้ตัวนี้ในการเลือก kubeCred
+//def kubeContextName = ''
+
+//stage('build by kaniko')
+def image = ''
+def preImage = "harbor.postway.co.th"   //พาทของ images ที่เก็บใน web harbor  //📌 เปลี่ยนตรงนี้ #1.1
+def preImage2 = "/dgcstore/api"   //พาทของ images ที่เก็บใน web harbor  //📌 เปลี่ยนตรงนี้ #1.2
+def tagName = 'latest'
+def PathDockerfile = ".kaniko/Dockerfile"    //พาทของ dockerfile //📌 เปลี่ยนตรงนี้ #2
+
+//stage('deploy')
+def helmNamespace = 'dgc-web'    //กำหนด namespeace  //📌 เปลี่ยนตรงนี้ #3
+def helmValue = ''
+def appName = 'dgcstore-api'    //กำหนดชื่อ pod  //📌 เปลี่ยนตรงนี้ #4
+def PathChartDev = "values/api/values-api-dev.yaml"    //พาทของไฟล์ valuse-dev  //📌 เปลี่ยนตรงนี้ #5
+def PathChartStg = "values/api/values-api-stg.yaml"    //พาทของไฟล์ valuse-stg  //📌 เปลี่ยนตรงนี ้ #6
+def PathChartProd = "values/api/values-api.yaml"    //พาทของไฟล์ valuse-prod  //📌 เปลี่ยนตรงนี้ #7
+
+// แยก logic เพื่อกำหนด mode และ cloud ก่อนสร้าง podTemplate
+if (env.gitlabBranch != null) {
+    gitBranch = "${env.gitlabBranch}";
+    echo "🌿 GitLab Branch (🌿 GitLab สาขา) : ${gitBranch}"
+} else {
+    gitBranch = "${gitBranch}";
+}
+
+// check mode in develop, staging or production
+if (gitBranch.indexOf("develop") > -1 || gitBranch.indexOf("feature") > -1) {
+    mode = 'develop'
+} else if (gitBranch.indexOf("release") > -1 || gitBranch.indexOf("hotfix") > -1) {
+    mode = 'staging'
+} else if (gitBranch.indexOf("master") > -1 || gitBranch.indexOf("main") > -1) {
+    mode = 'production'
+}
+echo "🚦 Deploy Mode (🚦 โหมด Deploy) : ${mode}"
+
+cloudName = (mode == 'production') ? 'kubernetes' : 'kubernetes'  //cluster name config in web jenkins
+kubeCredToUse = (mode == 'production') ? 'kubeCred' : 'kubeCred'
+kubeContextName = (mode == 'production') ? 'pw-local' : 'pw-local'  //Context
+
+// Log configuration
+echo "--------------------------------------------------------------------"
+echo "📌 Using Branch    (📌 ใช้ สาขา)            : ${gitBranch}"
+echo "📌 Mode            (📌 โหมด)               : ${mode}"
+echo "📌 Cloud           (📌 คลาวด์ที่ใช้)           : ${cloudName}"
+echo "📌 Kube Credential (📌 สิทธิ์ Kubernetes ที่ใช้) : ${kubeCredToUse}"
+echo "📌 Context         (📌 บริบท Kubernetes)    : ${kubeContextName}"
+echo "--------------------------------------------------------------------"
+
+//podTemplate ของ Jenkins ที่ใช้บน Kubernetes ผ่าน Jenkins Kubernetes Plugin ซึ่งกำหนด template ของ pod ที่จะถูกสร้างขึ้นมาเมื่อ pipeline รันใน environment นั้น
+podTemplate(cloud: cloudName, containers: [
+    //git 
+    //ใช้เพื่อรันคำสั่ง git clone, git fetch, etc.
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'bitnami/git', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'git', 
+        workingDir: '/home/jenkins/agent'),     //path ที่ Jenkins จะใช้ทำงาน
+    
+    //python
+    //ใช้เพื่อระบุว่า container นี้จะใช้ Docker image ตัวไหนเป็นพื้นฐาน และพร้อมใช้งานสำหรับ job ที่เขียนด้วย Python โดยไม่ต้องติดตั้งใหม่ทุกครั้ง.
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'python:3.9-slim', // ใช้ image ของ Python เวอร์ชันที่คุณต้องการ
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'python',  // ตั้งชื่อ container ว่า python
+        workingDir: '/home/jenkins/agent'), 
+
+    //kaniko 
+    //ใช้สำหรับ build image โดยไม่ต้องใช้ Docker daemon (เหมาะกับ Kubernetes)  //Build image ด้วย Kaniko (Dockerless)
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'gcr.io/kaniko-project/executor:v1.23.2-debug', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'kaniko', 
+        workingDir: '/home/jenkins/agent'),
+
+    //helm
+    //ใช้รันคำสั่ง Helm เช่น helm install, helm upgrade  //Deploy ด้วย Helm
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'fluxcd/helm-operator:1.4.4', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'helm', 
+        workingDir: '/home/jenkins/agent')
+    ], 
+    inheritFrom: ' ', 
+    namespace: 'cicd',     //กำหนด namespace ที่ Jenkins จะใช้ในการรัน pod ใน Kubernetes
+    volumes: [
+        secretVolume(mountPath: '/kaniko/.docker', optional: false, secretName: 'kaniko-secret')
+    ]) {
+    node(POD_LABEL) {
+
+    // 🧹 ล้าง workspace ตอนจบเสมอ (กันไฟล์ค้างแม้ใช้ PVC ในอนาคต). //start->end finally{}
+    try {
+
+            stage("git clone") 
+            {
+                container("git") {
+                    script {
+                        try {
+                            // get workspace in jenkins agent
+                            echo "🔍 Cloning Git Branch (🔍 กำลังโคลน Git สาขา) : ${gitBranch}"
+                            workspace = pwd()
+                            echo "📁 Workspace (📁 พื้นที่ทำงาน) : ${workspace}"
+
+                            // 🧹 ล้างก่อนเริ่มทุกครั้ง (กันไฟล์ซ้ำ/หลงจากรอบก่อนหรือจาก retry)
+                            echo "🧹 Clean before start (remove old/duplicate files from previous run or retry) / 🧹 ล้างก่อนเริ่มทุกครั้ง (กันไฟล์ซ้ำ/ค้างจากรอบก่อนหรือ retry)"
+                            deleteDir()
+                            echo "✅ deleteDir() finish (✅ deleteDir() เสร็จ)"
+
+                            // git clone code  // clone ใหม่เสมอ
+                            echo "⚡️🚀 git clone code  (โคลน code)"
+                            git branch: "${gitBranch}", credentialsId: "${gitCred}", url: "${gitUrl}"
+                            echo "✅ Git clone completed successfully. (✅ การโคลน Git เสร็จสมบูรณ์)"
+
+                            echo "Workspace directory (โฟลเดอร์หรือสารบบที่ใช้ในการจัดเก็บไฟล์) : ${workspace}"
+                            sh "git config --global --add safe.directory ${workspace}"
+                            
+                            // get git revision
+                            gitRevision = sh(script: "git log -n 1 --pretty=format:'%H'", returnStdout: true).substring(0, 16)
+                            echo "🔢 Git Revision (🔢 สำเนาการแก้ไข Git) : ${gitRevision}"
+
+                            // if (mode == 'production') {
+                            //     tag = sh(script: 'git tag --points-at HEAD | tail -1', returnStdout: true).trim()
+                            //     tag = tag.trim()
+                            //     echo "Git tag: ${tag}"
+                            // }
+                            if (mode == 'production') {
+                                def tmpTag = sh(script: 'git tag --points-at HEAD | tail -1', returnStdout: true).trim()
+                                if (!tmpTag) {
+                                    error "❌ No Git tag found at HEAD in production mode ! (❌ ไม่พบแท็ก Git ใน HEAD ในโหมด production !)"
+                                }
+                                tag = tmpTag
+                                echo "🏷️ Git Tag (🏷️ Git แท็ก) : ${tag}"
+                            }
+                        } catch (ex) {
+                            //echo "Git clone failed: ${ex.getMessage()}"
+                            //gitBranch = "develop";
+                            //mode = 'develop';
+                            echo "❌ Git clone failed (❌ การโคลน Git ล้มเหลว) : ${ex.getMessage()}"
+                            cleanWs()
+                            error ex.getMessage()
+                        }
+                    }
+                }
+            }
+
+            stage('build by kaniko') {
+                container('kaniko') {
+                    ansiColor('xterm') {
+                        script {
+                            try {
+                                
+                                //harbor image
+                                if (mode == 'develop') {
+                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    tag = tagName
+                                } else if (mode == 'staging') {
+                                    image = "${preImage}/dgc-staging${preImage2}"
+                                    tag = tagName
+                                } else if (mode == 'production') {
+                                    image = "${preImage}/dgc${preImage2}"
+                                } else {
+                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    tag = tagName
+                                }
+
+                                echo "📤 Building Docker Image (สร้าง Docker image) : ${image}:${tag}"
+
+                                cmd = [
+                                    "--dockerfile ${workspace}/${PathDockerfile}",
+                                    "--context ${workspace}",
+                                    "--destination=${image}:${tag}",
+                                    "--compressed-caching=false",
+                                    "--snapshot-mode=redo"
+                                ].join(' ')
+                                echo "📤 Building Docker Image (📤 สร้าง Docker image) : ${image}:${tag}"
+                                echo "🧱 Kaniko Command (🧱 คำสั่ง Kaniko) : /kaniko/executor ${cmd}"
+                                sh "/kaniko/executor ${cmd}"
+                                echo "✅ Kaniko build completed (✅ สร้าง image ด้วย Kaniko เสร็จสมบูรณ์)"
+                                echo "📸 Docker image (📸 ชื่อ image ที่จะใช้งาน) : ${image}:${tag}"
+                            } catch (ex) {
+                                echo "❌ Kaniko build failed (❌ การ build ด้วย Kaniko ล้มเหลว) : ${ex.getMessage()}"
+                                cleanWs()
+                                error ex.getMessage()
+                            }
+                        }
+                    }
+                }
+            }
+
+            stage('deploy') {
+                ansiColor('xterm') {
+                    script {
+                        try {
+                            echo "🚀 Starting deployment (🚀 เริ่มต้นกระบวนการ deploy)"
+                            if (mode == 'develop') {
+                                helmNamespace = "${helmNamespace}-dev"
+                                helmValue = "${PathChartDev}"
+                            } else if (mode == 'staging') {
+                                helmNamespace = "${helmNamespace}-stg"
+                                helmValue = "${PathChartStg}"
+                            } else if (mode == 'production') {
+                                helmNamespace = "${helmNamespace}"
+                                helmValue = "${PathChartProd}"
+                            }
+                            echo "🔧 Running build command for ${mode} mode (🔧 เรียกใช้คำสั่ง build สำหรับโหมด ${mode})"
+
+                        echo "📁 Namespace: ${helmNamespace} (📁 ใช้ namespace: ${helmNamespace})"
+                        echo "📄 Helm values file: ${helmValue} (📄 ใช้ไฟล์ Helm: ${helmValue})"
+
+                            //dir และ withCredentials
+                            echo "🔐 Writing kubeconfig to config.yaml (🔐 สร้างไฟล์ kubeconfig เพื่อใช้เชื่อมต่อ Kubernetes)"
+                            dir('.chart') {
+                                withCredentials([string(credentialsId: kubeCredToUse, variable: 'KUBECONFIG_BASE64')]) {
+                                    echo "🔐 Decoding kubeconfig (🔐 ถอดรหัส kubeconfig)"
+                                    sh "echo \$KUBECONFIG_BASE64 | base64 -d -w 0 > config.yaml"
+                                    echo "🔐 Kubeconfig decoded (🔐 Kubeconfig ถูกถอดรหัสแล้ว)"
+                                }
+                            }
+                        } catch (ex) {
+                            echo "❌ Kubeconfig decode failed (❌ การถอดรหัส Kubeconfig ล้มเหลว) : ${ex.getMessage()}"
+                            cleanWs()
+                            error ex.getMessage()
+                        }
+
+                        container('helm') {
+                            try {
+                                dir('.chart') {
+                                    echo "📄 Applying Kubernetes secret config (📄 นำ secret เข้า cluster ผ่านไฟล์ namespace-secret.yaml)"
+                                    cmd = [
+                                        "apply",
+                                        "-f namespace-secret.yaml",
+                                        "--kubeconfig=config.yaml",
+                                        "--context ${kubeContextName}"
+                                    ].join(' ')
+                                    sh "kubectl ${cmd}"
+                                    echo "🧭 Deploying with Helm (🧭 กำลัง deploy ด้วย Helm)"
+                                    
+                                    cmd = [
+                                        'upgrade',
+                                        '--install',
+                                        "--kubeconfig=config.yaml",
+                                        "--kube-context ${kubeContextName}",
+                                        "--namespace ${helmNamespace}",
+                                        "--set image.tag=${tag}",
+                                        "-f ${helmValue}",
+                                        "${appName} ."
+                                    ].join(' ')
+                                    sh "helm3 ${cmd}"
+                                    echo "🚀 Helm deploy complete (🚀 Helm deploy เสร็จสมบูรณ์)"
+
+                                    if (mode != 'production') {
+                                        echo "🧹 Restarting pods for update (🧹 กำลังรีสตาร์ท pods เพื่ออัปเดต)"
+                                        cmd = [
+                                            'delete',
+                                            'pod',
+                                            "--kubeconfig=config.yaml",
+                                            "--context ${kubeContextName}",
+                                            "--namespace ${helmNamespace}",
+                                            "--selector=app.kubernetes.io/instance=${appName}"
+                                        ].join(' ')
+                                        sh "kubectl ${cmd}"
+                                        echo "🔍 Selector (🔍 ตัวเลือก) : app.kubernetes.io/instance=${appName} (ตัวกรองสำหรับลบ pods)"
+                                        echo "📍 Namespace (📍 เนมสเปซ) : ${helmNamespace} (ลบ pods ใน namespace นี้)"
+
+                                        //sleep 30s (หน่วงเวลา 30 วินาที ก่อนตรวจสอบสถานะ Pod)
+                                    echo "⏳ Waiting 30 seconds before checking pod status (⏳ หน่วงเวลา 30 วินาทีก่อนตรวจสอบสถานะ Pod)"
+                                    sleep 30
+
+                                    }
+
+                                    //Pod status check complete (ตรวจสอบสถานะ Pod เสร็จเรียบร้อย)"
+                                    echo "-----------------------------------------Show more (แสดงเพิ่มเติม)-----------------------------------------"
+                                    echo "🔎 Checking pod status (🔎 ตรวจสอบสถานะ Pod)"
+                                    echo ""
+                                    cmd = [
+                                        'get',
+                                        'pods',
+                                        "--kubeconfig=config.yaml",
+                                        "--context ${kubeContextName}",
+                                        "--namespace ${helmNamespace}",
+                                        "--selector=app.kubernetes.io/instance=${appName}",
+                                        "--output=wide"
+                                    ].join(' ')
+                                    sh "kubectl ${cmd}"
+                                    echo "✅ Pod status check complete (✅ ตรวจสอบสถานะ Pod เสร็จเรียบร้อย)"
+                                    echo ""
+                                    echo "-----------------------------------------Show more (แสดงเพิ่มเติม)-----------------------------------------"
+                                    echo "📋 Show logs from pods (📋 แสดง log จาก pods)"
+                                    echo ""
+                                    // ดึงชื่อ Pod ทั้งหมดที่ตรง selector มาเก็บใน list
+                                    def podsList = sh(
+                                        script: "kubectl get pods --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --selector=app.kubernetes.io/instance=${appName} -o jsonpath='{.items[*].metadata.name}'",
+                                        returnStdout: true
+                                    ).trim().split(' ')
+
+                                    // แสดง log ของแต่ละ pod
+                                    for (podName in podsList) {
+                                        echo "📄 Logs from pod (📄 บันทึกจาก Logs) : ${podName}"
+                                        try {
+                                            sh "kubectl logs ${podName} -c dgc-chart --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --tail=100"
+                                        } catch (ex) {
+                                            echo "⚠️ Failed to get logs from pod (⚠️ ไม่สามารถรับบันทึกจาก pod ได้) ${podName}: ${ex.getMessage()}"
+                                        }
+                                    }
+                                    echo "--------------------------------------------------------------------------------------------------------"
+                                    echo ""
+                                    
+                                    echo "✅ Deployment completed (✅ การ deploy เสร็จสมบูรณ์)"
+                                    echo "🎉 Pipeline finished successfully (🎉 กระบวนการ Jenkins เสร็จสมบูรณ์)"
+                                }
+                            } catch (ex) {
+                                echo "❌ Deployment failed (❌ การ deploy ล้มเหลว)"
+                                cleanWs()
+                                error ex.getMessage()
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+        // 🧹 ล้าง workspace ตอนจบทุกครั้ง (แม้ success/failed)
+        echo "🧹 Clean after finish (always clear workspace, success or fail) (🧹 ล้าง workspace ตอนจบทุกครั้ง (แม้ success/failed))"
+        cleanWs()
+        }
+    }
+}

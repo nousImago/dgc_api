@@ -1,0 +1,12 @@
+Alembic migrations for DGC API.
+
+Async-compatible. All ORM models are auto-imported in env.py — add new
+domains to that file's import block so autogenerate detects their tables.
+
+Common commands (run from repo root):
+
+  uv run alembic revision --autogenerate -m "describe the change"
+  uv run alembic upgrade head
+  uv run alembic downgrade -1
+  uv run alembic history
+  uv run alembic current

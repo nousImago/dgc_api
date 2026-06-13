@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dgc-api
+  namespace: dgc
+  labels:
+    app: dgc-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dgc-api
+  template:
+    metadata:
+      labels:
+        app: dgc-api
+    spec:
+      containers:
+        - name: api
+          image: dgc-api:latest    # replace with your registry
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: dgc-api-config
+            - secretRef:
+                name: dgc-api-secret
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            # Bumped after the WeasyPrint migration: Pango/HarfBuzz, font
+            # tables, and per-render cairo surfaces add ~30-60 MB to baseline
+            # RSS plus transient allocations during PDF generation. 512Mi
+            # was borderline; 1Gi gives comfortable headroom under load.
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi

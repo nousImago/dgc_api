@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dgc-api-config
+  namespace: dgc
+data:
+  APP_NAME: "DGC API"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  CORS_ORIGINS: '["https://dgc.example.com"]'
+  DB_POOL_SIZE: "10"
+  DB_MAX_OVERFLOW: "20"
+  DB_POOL_RECYCLE: "3600"
+  DB_ECHO: "false"
+  JWT_ALGORITHM: "HS256"
+  JWT_ACCESS_TTL_MINUTES: "60"
+  JWT_REFRESH_TTL_MINUTES: "20160"
+  LINE_NOTIFY_URL: "https://notify-api.line.me/api/notify"
+  SMTP_HOST: "smtp.example.com"
+  SMTP_PORT: "587"
+  SMTP_FROM: "DGC <noreply@example.com>"
+  SMTP_USE_TLS: "true"
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "dgc-uploads"
+  S3_PRESIGNED_URL_TTL_SECONDS: "3600"

@@ -1,0 +1,30 @@
+# Run Alembic migration before deploying new pods.
+# Usage: kubectl apply -f job-migrate.yaml
+# After success: kubectl apply -f deployment.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dgc-api-migrate
+  namespace: dgc
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: dgc-api:latest    # same image as the API
+          command: ["python", "-m", "alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: dgc-api-config
+            - secretRef:
+                name: dgc-api-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

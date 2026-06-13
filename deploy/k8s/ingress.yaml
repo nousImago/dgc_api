@@ -1,0 +1,46 @@
+# Shared Ingress for both dgc-api and dgc-front.
+# Requires an ingress controller (nginx-ingress, traefik, etc.)
+#
+# Routes:
+#   /api/*   -> dgc-api service (port 80 -> pod 8000)
+#   /health  -> dgc-api service
+#   /docs    -> dgc-api service (OpenAPI docs, debug only)
+#   /*       -> dgc-front service (SPA, catches all other paths)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dgc-ingress
+  namespace: dgc
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: dgc.example.com    # change to your domain
+      http:
+        paths:
+          # Backend API
+          - path: /api(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: dgc-api
+                port:
+                  number: 80
+          # Health check (direct)
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: dgc-api
+                port:
+                  number: 80
+          # Frontend SPA (catch-all)
+          - path: /(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: dgc-front
+                port:
+                  number: 80

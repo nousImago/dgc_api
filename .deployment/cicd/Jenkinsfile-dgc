@@ -1,0 +1,286 @@
+def gitBranch = 'develop'
+def cmd = ''
+def mode = 'develop'
+def tag = 'latest'
+def gitRevision = ''
+def workspace = ''
+def cloudName = 'kubernetes'   // ตั้งค่าค่าเริ่มต้น  //cluster name config in web jenkins
+def kubeCredToUse = 'kubeCred' // 📌 [ไจแอนท์แก้ไข] กำหนดค่าเริ่มต้นไว้ตรงนี้ก่อน
+def kubeContextName = 'pw-local' // 📌 [ไจแอนท์แก้ไข] กำหนดค่าเริ่มต้นไว้ตรงนี้ก่อน
+
+//stage('build by kaniko')
+def image = ''
+def preImage = "harbor.postway.co.th"   //พาทของ images ที่เก็บใน web harbor  //📌 เปลี่ยนตรงนี้ #1.1
+def preImage2 = "/dgcstore/api"     //พาทของ images ที่เก็บใน web harbor  //📌 เปลี่ยนตรงนี้ #1.2
+def tagName = 'latest'
+def PathDockerfile = ".kaniko/Dockerfile"    //พาทของ dockerfile //📌 เปลี่ยนตรงนี้ #2
+
+//stage('deploy')
+def helmNamespace = 'dgc-web'    //กำหนด namespeace  //📌 เปลี่ยนตรงนี้ #3
+def helmValue = ''
+def appName = 'dgcstore-api'    //กำหนดชื่อ pod  //📌 เปลี่ยนตรงนี้ #4
+def PathChartDev = "values/api/values-api-dev.yaml"    //พาทของไฟล์ valuse-dev  //📌 เปลี่ยนตรงนี้ #5
+def PathChartStg = "values/api/values-api-stg.yaml"    //พาทของไฟล์ valuse-stg  //📌 เปลี่ยนตรงนี ้ #6
+def PathChartProd = "values/api/values-api.yaml"    //พาทของไฟล์ valuse-prod  //📌 เปลี่ยนตรงนี้ #7
+
+// ลบบล็อกดักจับชื่อบรานช์และ mode ตรงนี้ออกทั้งหมด เพราะจะย้ายไปทำใน Stage เพื่อความแม่นยำครับ
+
+//podTemplate ของ Jenkins ที่ใช้บน Kubernetes ผ่าน Jenkins Kubernetes Plugin
+podTemplate(cloud: cloudName, containers: [
+    //git 
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'bitnami/git', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'git', 
+        workingDir: '/home/jenkins/agent'), 
+    
+    //python 📌 [ไจแอนท์เช็คแล้ว] คอนเทนเนอร์นี้ถูกต้องสำหรับโปรเจกต์ API ครับ
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'python:3.9-slim', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'python', 
+        workingDir: '/home/jenkins/agent'), 
+
+    //kaniko 
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'gcr.io/kaniko-project/executor:v1.23.2-debug', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'kaniko', 
+        workingDir: '/home/jenkins/agent'),
+
+    //helm
+    containerTemplate(
+        args: '9999999', 
+        command: 'sleep', 
+        image: 'fluxcd/helm-operator:1.4.4', 
+        livenessProbe: containerLivenessProbe(execArgs: '', failureThreshold: 0, initialDelaySeconds: 0, periodSeconds: 0, successThreshold: 0, timeoutSeconds: 0), 
+        name: 'helm', 
+        workingDir: '/home/jenkins/agent')
+    ], 
+    inheritFrom: ' ', 
+    namespace: 'cicd', 
+    volumes: [
+        secretVolume(mountPath: '/kaniko/.docker', optional: false, secretName: 'kaniko-secret')
+    ]) {
+    node(POD_LABEL) {
+
+    try {
+            stage("git clone") {
+                container("git") {
+                    script {
+                        try {
+                            echo "🔍 Cloning Git Branch..."
+                            workspace = pwd()
+                            echo "📁 Workspace : ${workspace}"
+
+                            echo "🧹 Clean before start"
+                            deleteDir()
+                            
+                            // 📌 [ไจแอนท์แก้ไข] ใช้ checkout scm เพื่อให้รองรับ Multi-Job ที่เราเพิ่งแยกกันครับ
+                            echo "⚡️🚀 checkout scm (ดึงโค้ดจากกิ่งล่าสุด)"
+                            checkout scm
+
+                            // 📌 [ไจแอนท์แก้ไข] ปลดล็อค Git Ownership ก่อนดักจับชื่อบรานช์
+                            sh "git config --global --add safe.directory ${workspace}"
+
+                            // 📌 [ไจแอนท์แก้ไข] ดักจับชื่อ Branch ให้รองรับทั้ง branch ปกติ และ Tags สำหรับ Production
+                            if (env.BRANCH_NAME != null && env.BRANCH_NAME != "") { 
+                                gitBranch = env.BRANCH_NAME
+                            } else if (env.GIT_BRANCH != null && env.GIT_BRANCH != "") { 
+                                gitBranch = env.GIT_BRANCH.replaceFirst(/^origin\//, '')
+                            } else if (env.gitlabBranch != null && env.gitlabBranch != "") {
+                                gitBranch = env.gitlabBranch
+                            } else {
+                                gitBranch = sh(script: "git name-rev --name-only HEAD | sed 's~remotes/origin/~~'", returnStdout: true).trim()
+                            }
+                            echo "🌿 Git Branch Detected (ตรวจพบสาขา) : ${gitBranch}"
+
+                            // 📌 [ไจแอนท์แก้ไข] เช็ค Mode โดยเพิ่มเงื่อนไข tags/ เพื่อให้ขึ้น Production ได้
+                            if (gitBranch.indexOf("develop") > -1 || gitBranch.indexOf("feature") > -1) {
+                                mode = 'develop'
+                            } else if (gitBranch.indexOf("release") > -1 || gitBranch.indexOf("hotfix") > -1) {
+                                mode = 'staging'
+                            } else if (gitBranch.indexOf("master") > -1 || gitBranch.indexOf("main") > -1 || gitBranch.indexOf("tags/") > -1) {
+                                mode = 'production'
+                            } else {
+                                mode = 'develop'
+                            }
+
+                            kubeCredToUse = (mode == 'production') ? 'kubeCred' : 'kubeCred'
+                            kubeContextName = (mode == 'production') ? 'pw-local' : 'pw-local'
+
+                            echo "--------------------------------------------------------------------"
+                            echo "📌 Using Branch    : ${gitBranch}"
+                            echo "📌 Mode            : ${mode}"
+                            echo "📌 Cloud           : ${cloudName}"
+                            echo "📌 Kube Credential : ${kubeCredToUse}"
+                            echo "📌 Context         : ${kubeContextName}"
+                            echo "--------------------------------------------------------------------"
+
+                            echo "✅ Git clone completed successfully."
+                            
+                            gitRevision = sh(script: "git log -n 1 --pretty=format:'%H'", returnStdout: true).substring(0, 16)
+                            echo "🔢 Git Revision : ${gitRevision}"
+                            
+                            // 📌 [ไจแอนท์แก้ไข] จัดการเรื่องเลข Tag สำหรับ Production
+                            if (mode == 'production') {
+                                def tmpTag = sh(script: 'git tag --points-at HEAD | tail -1', returnStdout: true).trim()
+                                if (!tmpTag) {
+                                    echo "⚠️ No explicit tag found, using git revision as tag instead."
+                                    tag = gitRevision
+                                } else {
+                                    tag = tmpTag
+                                }
+                                echo "🏷️ Production Tag : ${tag}"
+                            }
+                        } catch (ex) {
+                            echo "❌ Git clone failed : ${ex.getMessage()}"
+                            cleanWs()
+                            error ex.getMessage()
+                        }
+                    }
+                }
+            }
+
+            stage("build") {
+                container("python") { // 📌 [ไจแอนท์แก้ไข] เปลี่ยนจาก node เป็น python ให้ตรงกับ podTemplate
+                    ansiColor('xterm') {
+                        script {
+                            echo "🏗️ Preparing API environment for mode : ${mode}"
+                            // สำหรับ Python API ปกติเราอาจจะไม่ต้อง Compile 
+                            // แต่อาจจะใช้ stage นี้ในการทำ Unit Test หรือเตรียมไฟล์ Config ครับ
+                            echo "✅ API Build stage completed"
+                        }
+                    }
+                }
+            }
+
+            stage('build by kaniko') {
+                container('kaniko') {
+                    ansiColor('xterm') {
+                        script {
+                            try {
+                                if (mode == 'develop') {
+                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    tag = tagName
+                                } else if (mode == 'staging') {
+                                    image = "${preImage}/dgc-staging${preImage2}"
+                                    tag = tagName
+                                } else if (mode == 'production') {
+                                    image = "${preImage}/dgc${preImage2}"
+                                    // tag ถูกกำหนดไว้แล้วในขั้นตอน git clone
+                                } else {
+                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    tag = tagName
+                                }
+
+                                echo "📤 Building API Docker Image : ${image}:${tag}"
+
+                                cmd = [
+                                    "--dockerfile ${workspace}/${PathDockerfile}",
+                                    "--context ${workspace}",
+                                    "--destination=${image}:${tag}",
+                                    "--compressed-caching=false",
+                                    "--snapshot-mode=redo"
+                                ].join(' ')
+                                sh "/kaniko/executor ${cmd}"
+                                echo "✅ Kaniko build completed"
+                            } catch (ex) {
+                                echo "❌ Kaniko build failed : ${ex.getMessage()}"
+                                cleanWs()
+                                error ex.getMessage()
+                            }
+                        }
+                    }
+                }
+            }
+
+            stage('deploy') {
+                ansiColor('xterm') {
+                    script {
+                        try {
+                            if (mode == 'develop') {
+                                helmNamespace = "${helmNamespace}-dev"
+                                helmValue = "${PathChartDev}"
+                            } else if (mode == 'staging') {
+                                helmNamespace = "${helmNamespace}-stg"
+                                helmValue = "${PathChartStg}"
+                            } else if (mode == 'production') {
+                                helmNamespace = "${helmNamespace}"
+                                helmValue = "${PathChartProd}"
+                            }
+                            
+                            echo "🚀 Starting deployment to ${helmNamespace}"
+
+                            dir('.chart') {
+                                withCredentials([string(credentialsId: kubeCredToUse, variable: 'KUBECONFIG_BASE64')]) {
+                                    sh "echo \$KUBECONFIG_BASE64 | base64 -d -w 0 > config.yaml"
+                                }
+                            }
+
+                            container('helm') {
+                                dir('.chart') {
+                                    sh "kubectl apply -f namespace-secret.yaml --kubeconfig=config.yaml --context ${kubeContextName}"
+                                    
+                                    cmd = [
+                                        'upgrade',
+                                        '--install',
+                                        "--kubeconfig=config.yaml",
+                                        "--kube-context ${kubeContextName}",
+                                        "--namespace ${helmNamespace}",
+                                        "--set image.tag=${tag}",
+                                        "-f ${helmValue}",
+                                        "${appName} ."
+                                    ].join(' ')
+                                    sh "helm3 ${cmd}"
+                                    echo "🚀 Helm deploy complete"
+
+                                    // สั่งรีสตาร์ท Pod ถ้าไม่ใช่ Production เพื่อให้เห็นการเปลี่ยนแปลงทันที
+                                    if (mode != 'production') {
+                                        sh "kubectl delete pod --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --selector=app.kubernetes.io/instance=${appName} --ignore-not-found"
+                                        echo "⏳ Waiting 30 seconds for Pods to spin up..."
+                                        sleep 30
+                                    }
+
+                                    // ตรวจสอบสถานะและแสดง Log
+                                    sh "kubectl get pods --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --selector=app.kubernetes.io/instance=${appName} --output=wide"
+                                    
+                                    def podsList = sh(
+                                        script: "kubectl get pods --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --selector=app.kubernetes.io/instance=${appName} -o jsonpath='{.items[*].metadata.name}'",
+                                        returnStdout: true
+                                    ).trim().split(' ')
+
+                                    for (podName in podsList) {
+                                        if (podName) {
+                                            echo "📄 Logs from API pod : ${podName}"
+                                            try {
+                                                // 📌 [ไจแอนท์แก้ไข] ใส่ชื่อคอนเทนเนอร์ให้ตรงกับที่ระบุใน Helm Chart (ซึ่งส่วนใหญ่มักจะตั้งตาม appName)
+                                                // -c dgc-chart selects the API container — the pod also carries
+                                                // a fluentbit log-shipper sidecar, and without -c kubectl errors out.
+                                                sh "kubectl logs ${podName} -c dgc-chart --kubeconfig=config.yaml --context ${kubeContextName} --namespace ${helmNamespace} --tail=50"
+                                            } catch (e) {
+                                                echo "⚠️ Could not fetch logs for ${podName}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (ex) {
+                            echo "❌ Deployment failed"
+                            cleanWs()
+                            error ex.getMessage()
+                        }
+                    }
+                }
+            }
+        } finally {
+            cleanWs()
+        }
+    }
+}

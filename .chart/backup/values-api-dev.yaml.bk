@@ -1,0 +1,136 @@
+# Default values for dgc-chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: harbor.postway.co.th/dgc-develop/dgcstore/api
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+envs:
+  - name: TZ
+    value: "Asia/Bangkok"
+
+#----------DGC DATABASE----------
+  - name: DGC_DB_HOST
+    value: "dev.postway.co.th"
+  - name: DGC_DB_PORT
+    value: "61803"
+  - name: DGC_DB_USER
+    value: "dgc"
+  - name: DGC_DB_PASS
+    value: "dgc0nCl0ucl"
+  - name: DGC_DB_NAME
+    value: "dgcstore_dev"
+  - name: DGC_DB_SCHEMA
+    value: "public"
+  - name: DATABASE_URL
+    value: "postgresql+asyncpg://dgc:dgc0nCl0ucl@dev.postway.co.th:61803/dgcstore_dev"
+
+#----------JWT----------
+  - name: JWT_SECRET
+    value: "dev-secret-change-me-in-prod"
+#  - name: LOG_FILE
+#    value: "/var/log/app/api.log"  # uncomment when fluentbit.enabled: true
+
+#----------MINIO----------
+  - name: MINIO_ENDPOINT
+    value: "storage-hq.postway.co.th"
+  - name: MINIO_ACCESS_KEY
+    value: "REPLACE_WITH_MINIO_ACCESS_KEY"
+  - name: MINIO_SECRET_KEY
+    value: "REPLACE_WITH_MINIO_SECRET_KEY"
+  - name: MINIO_BUCKET_NAME
+    value: "dgcdev"
+  - name: MINIO_BUCKET_LOG
+    value: "dgcdev-log"
+
+imagePullSecrets:
+  - name: regcred
+
+nameOverride: ""
+fullnameOverride: "dgcstore-api"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: NodePort
+  port: 8000
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$2
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1024m"
+  hosts:
+    - host: dev.dgcstore.com
+      paths:
+        - /api(/|$)(.*)
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  limits:
+    cpu: 1
+    memory: 512Mi
+  requests:
+    cpu: 0.01
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 50
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+# nodeSelector:
+#   kubernetes.io/hostname: vm2
+
+tolerations: []
+
+affinity: {}
+
+fluentbit:
+  enabled: false
+  image: "harbor.postway.co.th/dgc/fluent/fluent-bit:3.1"
+  logBucket: "dgcdev-log"
+  minioEndpoint: "storage-hq.postway.co.th"
+  minioAccessKey: "REPLACE_WITH_MINIO_ACCESS_KEY"
+  minioSecretKey: "REPLACE_WITH_MINIO_SECRET_KEY"
+
+
+

@@ -1,0 +1,50 @@
+{{- if .Values.fluentbit.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dgc-chart.fullname" . }}-fluentbit
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "dgc-chart.labels" . | nindent 4 }}
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         10
+        Daemon        Off
+        Log_Level     warn
+        Parsers_File  parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/app/api.log
+        Parser            json
+        Tag               api
+        Read_from_Head    On
+        Refresh_Interval  5
+        Skip_Long_Lines   On
+
+    [OUTPUT]
+        Name              s3
+        Match             *
+        bucket            ${LOG_BUCKET}
+        endpoint          ${MINIO_ENDPOINT}
+        region            us-east-1
+        # Year/month folders, then a date-prefixed file. The .log extension
+        # lets the MinIO console / browser open files as text instead of
+        # downloading them as octet-stream. `$UUID` keeps filenames unique
+        # when multiple flushes hit the same second.
+        s3_key_format     /logs/api/%Y/%m/%Y%m%d-%H%M%S-$UUID.log
+        use_put_object    On
+        # Roll bigger and slower than the defaults so a typical day is one or
+        # two files instead of hundreds. Bump these (or shorten upload_timeout)
+        # if you need lower latency for log visibility in MinIO.
+        total_file_size   50M
+        upload_timeout    1h
+
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+{{- end }}

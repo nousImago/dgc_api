@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dgc-chart.fullname" . }}
+  labels:
+    {{- include "dgc-chart.labels" . | nindent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      {{- include "dgc-chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+    {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+        # checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        rollme: {{ randAlphaNum 5 | quote }}
+    {{- end }}
+      labels:
+        {{- include "dgc-chart.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dgc-chart.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.envs }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.fluentbit.enabled }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+          {{- end }}
+
+        {{- if .Values.fluentbit.enabled }}
+        - name: fluentbit
+          image: {{ .Values.fluentbit.image | default "fluent/fluent-bit:3.3" }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LOG_BUCKET
+              value: {{ .Values.fluentbit.logBucket | quote }}
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.fluentbit.minioEndpoint | quote }}
+            - name: MINIO_ACCESS_KEY
+              value: {{ .Values.fluentbit.minioAccessKey | quote }}
+            - name: MINIO_SECRET_KEY
+              value: {{ .Values.fluentbit.minioSecretKey | quote }}
+          volumeMounts:
+            - name: app-logs
+              mountPath: /var/log/app
+            - name: fluentbit-config
+              mountPath: /fluent-bit/etc
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+        {{- end }}
+
+      {{- if .Values.fluentbit.enabled }}
+      volumes:
+        - name: app-logs
+          emptyDir: {}
+        - name: fluentbit-config
+          configMap:
+            name: {{ include "dgc-chart.fullname" . }}-fluentbit
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

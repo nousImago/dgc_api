@@ -1,0 +1,5 @@
+gitUrl=https://gitlab.com/simpitec/spend_analytics/api.git
+gitCred=gitlab-guide2korawit-userpass
+gitBranch=develop
+
+kubeContextName=pw-local

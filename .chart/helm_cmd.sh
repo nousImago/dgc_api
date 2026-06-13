@@ -1,0 +1,1 @@
+helm upgrade --kube-context Postway --namespace postway --set image.tag=1.2.2 -f values.yaml web .
