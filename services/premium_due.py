@@ -132,6 +132,7 @@ async def premium_register(
     for policy in policies:
         insured = _insured_party(policy)
         total, lines, any_error = await _rate_policy(session, policy, insured)
+        base, rider = _base_rider(lines)
         codes = [cov.product.code for cov in policy.coverages]
         items.append(
             PremiumRegisterItem(
@@ -142,6 +143,8 @@ async def premium_register(
                 effective_date=policy.effective_date,
                 products=_product_summary(codes),
                 coverage_count=len(codes),
+                base_premium=base,
+                rider_premium=rider,
                 premium_due=total,
                 has_error=any_error,
                 coverages=lines,

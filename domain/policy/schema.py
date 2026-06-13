@@ -103,6 +103,8 @@ class PremiumRegisterItem(BaseModel):
     effective_date: date
     products: str
     coverage_count: int
+    base_premium: Decimal
+    rider_premium: Decimal
     premium_due: Decimal
     has_error: bool
     coverages: list[PremiumDueCoverageLine] = Field(default_factory=list)
