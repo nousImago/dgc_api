@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.party.model import Party
@@ -18,6 +18,17 @@ async def get_by_external_ref(session: AsyncSession, external_ref: str) -> Party
 
 async def list_all(session: AsyncSession) -> list[Party]:
     result = await session.execute(select(Party).order_by(Party.full_name))
+    return list(result.scalars().all())
+
+
+async def search(session: AsyncSession, q: str, limit: int = 8) -> list[Party]:
+    pattern = f"%{q}%"
+    result = await session.execute(
+        select(Party)
+        .where(or_(Party.full_name.ilike(pattern), Party.external_ref.ilike(pattern)))
+        .order_by(Party.full_name)
+        .limit(limit)
+    )
     return list(result.scalars().all())
 
 

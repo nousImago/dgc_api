@@ -8,6 +8,7 @@ from api.v1 import (
     premium_register,
     products,
     quotes,
+    search,
 )
 
 api_router = APIRouter()
@@ -23,3 +24,4 @@ api_router.include_router(
     premium_register.router, prefix="/v1/premium-register", tags=["Premium Register"]
 )
 api_router.include_router(quotes.router, prefix="/v1/quotes", tags=["Quotes"])
+api_router.include_router(search.router, prefix="/v1/search", tags=["Search"])
