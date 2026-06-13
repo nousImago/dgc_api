@@ -31,6 +31,17 @@ async def resolve_active_version(
     return result.scalar_one_or_none()
 
 
+async def list_versions(
+    session: AsyncSession, product_id: int
+) -> list[RateTableVersion]:
+    result = await session.execute(
+        select(RateTableVersion)
+        .where(RateTableVersion.product_id == product_id)
+        .order_by(RateTableVersion.effective_from.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def get_version(session: AsyncSession, version_id: int) -> RateTableVersion | None:
     result = await session.execute(
         select(RateTableVersion).where(RateTableVersion.id == version_id)

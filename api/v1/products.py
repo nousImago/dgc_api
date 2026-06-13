@@ -4,8 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies import get_db, has_permission
 from domain.product.model import Product, ProductRatingDimension
 from domain.product.schema import ProductCreate, ProductOut
-from integrations.db.repositories import product_repo
-from observability.exceptions import ConflictError
+from domain.rate.model import RateTableVersion
+from domain.rate.schema import RateTableVersionOut
+from integrations.db.repositories import product_repo, rate_repo
+from observability.exceptions import ConflictError, NotFoundError
 
 router = APIRouter()
 
@@ -13,6 +15,17 @@ router = APIRouter()
 @router.get("", response_model=list[ProductOut])
 async def list_products(db: AsyncSession = Depends(get_db)) -> list[Product]:
     return await product_repo.list_all(db)
+
+
+@router.get("/{code}/rate-versions", response_model=list[RateTableVersionOut])
+async def product_rate_versions(
+    code: str, db: AsyncSession = Depends(get_db)
+) -> list[RateTableVersion]:
+    """The rate-table versions for a product (the product-factory admin view)."""
+    product = await product_repo.get_by_code(db, code)
+    if product is None:
+        raise NotFoundError(f"Unknown product: {code}")
+    return await rate_repo.list_versions(db, product.id)
 
 
 @router.post(
