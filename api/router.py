@@ -1,6 +1,14 @@
 from fastapi import APIRouter
 
-from api.v1 import auth, customers, policies, premium_due, products, quotes
+from api.v1 import (
+    auth,
+    customers,
+    policies,
+    premium_due,
+    premium_register,
+    products,
+    quotes,
+)
 
 api_router = APIRouter()
 
@@ -11,4 +19,7 @@ api_router.include_router(
 )
 api_router.include_router(products.router, prefix="/v1/products", tags=["Products"])
 api_router.include_router(policies.router, prefix="/v1/policies", tags=["Policies"])
+api_router.include_router(
+    premium_register.router, prefix="/v1/premium-register", tags=["Premium Register"]
+)
 api_router.include_router(quotes.router, prefix="/v1/quotes", tags=["Quotes"])

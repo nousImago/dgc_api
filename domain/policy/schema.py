@@ -63,3 +63,27 @@ class CustomerPremiumDue(BaseModel):
     full_name: str
     total_due: Decimal
     policies: list[PremiumDuePolicy] = Field(default_factory=list)
+
+
+# --- Premium register (portfolio worklist: one row per policy) ---
+
+
+class PremiumRegisterItem(BaseModel):
+    policy_id: int
+    policy_number: str
+    customer_id: int
+    insured_name: str
+    effective_date: date
+    products: str
+    coverage_count: int
+    premium_due: Decimal
+    has_error: bool
+    coverages: list[PremiumDueCoverageLine] = Field(default_factory=list)
+
+
+class PremiumRegisterPage(BaseModel):
+    total_policies: int
+    total_outstanding: Decimal
+    page: int
+    page_size: int
+    items: list[PremiumRegisterItem] = Field(default_factory=list)

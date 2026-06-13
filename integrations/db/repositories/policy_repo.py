@@ -1,7 +1,10 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from domain.customer.model import Customer
 from domain.policy.model import Policy, PolicyCoverage
+from domain.product.model import Product
 
 
 async def get_by_id(session: AsyncSession, policy_id: int) -> Policy | None:
@@ -28,6 +31,38 @@ async def list_for_customer(session: AsyncSession, customer_id: int) -> list[Pol
         .where(Policy.customer_id == customer_id)
         .order_by(Policy.policy_number)
     )
+    return list(result.scalars().all())
+
+
+async def list_filtered(
+    session: AsyncSession,
+    *,
+    product_code: str | None = None,
+    q: str | None = None,
+) -> list[Policy]:
+    """All policies matching the register filters, with customer + coverages
+    eagerly loaded for live premium computation. Ordered by policy number.
+
+    NOTE: the register sums/sorts premium in Python because premium is computed
+    live by the rating engine. At production scale, materialise the premium on
+    the policy (or a billing/invoice row) so pagination, sort, and SUM push down
+    into indexed SQL instead of an O(all-policies) live pass.
+    """
+    stmt = select(Policy).options(selectinload(Policy.customer))
+    if product_code:
+        stmt = stmt.where(
+            Policy.coverages.any(PolicyCoverage.product.has(Product.code == product_code))
+        )
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Policy.policy_number.ilike(pattern),
+                Policy.customer.has(Customer.full_name.ilike(pattern)),
+            )
+        )
+    stmt = stmt.order_by(Policy.policy_number)
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 
