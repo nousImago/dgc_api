@@ -2,28 +2,37 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.customer.model import Customer
+from domain.party.model import Party
 from domain.policy.model import Policy
 from domain.policy.schema import (
-    CustomerPremiumDue,
+    PartyPremiumDue,
     PremiumDueCoverageLine,
     PremiumDuePolicy,
     PremiumRegisterItem,
     PremiumRegisterPage,
 )
-from integrations.db.repositories import customer_repo, policy_repo
+from integrations.db.repositories import party_repo, policy_repo
 from observability.exceptions import DGCError, NotFoundError
 from services import rating
 
 _ZERO = Decimal("0.00")
 
 
+def _insured_party(policy: Policy) -> Party | None:
+    """The party in the 'insured' role — the rating subject. None if a policy
+    was somehow issued without one (surfaced as a per-line error, not a throw)."""
+    for role in policy.roles:
+        if role.role == "insured":
+            return role.party
+    return None
+
+
 async def _rate_policy(
-    session: AsyncSession, policy: Policy, customer: Customer
+    session: AsyncSession, policy: Policy, insured: Party | None
 ) -> tuple[Decimal, list[PremiumDueCoverageLine], bool]:
-    """Rate every coverage on a policy. Age is derived at the policy effective
-    date; an un-rateable coverage yields an error line (not an exception).
-    Returns (policy premium total, coverage lines, any_error)."""
+    """Rate every coverage on a policy against the insured's age/sex (age derived
+    at the policy effective date). An un-rateable coverage (or a missing insured)
+    yields an error line. Returns (policy total, coverage lines, any_error)."""
     total = _ZERO
     lines: list[PremiumDueCoverageLine] = []
     any_error = False
@@ -31,17 +40,22 @@ async def _rate_policy(
         line = PremiumDueCoverageLine(
             product_code=cov.product.code,
             kind=cov.product.kind,
-            sex=customer.sex,
+            sex=insured.sex if insured else "",
             sum_assured=cov.sum_assured,
         )
+        if insured is None:
+            line.error = "No insured party on policy"
+            any_error = True
+            lines.append(line)
+            continue
         try:
-            age = rating.age_last_birthday(customer.date_of_birth, policy.effective_date)
+            age = rating.age_last_birthday(insured.date_of_birth, policy.effective_date)
             line.age = age
             result = await rating.quote(
                 session,
                 product_code=cov.product.code,
                 effective_date=policy.effective_date,
-                dimensions={"age": age, "sex": customer.sex},
+                dimensions={"age": age, "sex": insured.sex},
                 sum_assured=cov.sum_assured,
             )
             line.gross_before_discount = result.gross_before_discount
@@ -54,18 +68,21 @@ async def _rate_policy(
     return total, lines, any_error
 
 
-async def premium_due_for_customer(
-    session: AsyncSession, customer_id: int
-) -> CustomerPremiumDue:
-    """Premium to collect for one customer, broken down by policy and coverage."""
-    customer = await customer_repo.get_by_id(session, customer_id)
-    if customer is None:
-        raise NotFoundError(f"Unknown customer: {customer_id}")
+async def premium_due_for_party(
+    session: AsyncSession, party_id: int
+) -> PartyPremiumDue:
+    """Premium to collect on the policies where this party is the **insured**,
+    broken down by policy and coverage."""
+    party = await party_repo.get_by_id(session, party_id)
+    if party is None:
+        raise NotFoundError(f"Unknown party: {party_id}")
 
+    policies = await policy_repo.list_for_party(session, party_id, role="insured")
     total_due = _ZERO
     policies_out: list[PremiumDuePolicy] = []
-    for policy in customer.policies:
-        policy_total, lines, _ = await _rate_policy(session, policy, customer)
+    for policy in policies:
+        insured = _insured_party(policy)
+        policy_total, lines, _ = await _rate_policy(session, policy, insured)
         policies_out.append(
             PremiumDuePolicy(
                 policy_number=policy.policy_number,
@@ -76,9 +93,9 @@ async def premium_due_for_customer(
         )
         total_due += policy_total
 
-    return CustomerPremiumDue(
-        customer_id=customer.id,
-        full_name=customer.full_name,
+    return PartyPremiumDue(
+        party_id=party.id,
+        full_name=party.full_name,
         total_due=total_due,
         policies=policies_out,
     )
@@ -99,30 +116,25 @@ async def premium_register(
     q: str | None = None,
 ) -> PremiumRegisterPage:
     """Portfolio-wide premium register: one row per policy with the premium due,
-    plus portfolio totals. The operational view for collections at scale —
-    paginated, filterable by product, searchable by policy number / insured.
-
-    Premium is computed live, so the full filtered set is rated, summed, and
-    sorted in Python before paging. See policy_repo.list_filtered for the
-    production materialisation note."""
+    plus portfolio totals. Premium is computed live, so the full filtered set is
+    rated, summed, and sorted in Python before paging (see
+    policy_repo.list_filtered for the production materialisation note)."""
     page = max(page, 1)
     page_size = max(min(page_size, 200), 1)
 
-    policies = await policy_repo.list_filtered(
-        session, product_code=product_code, q=q
-    )
+    policies = await policy_repo.list_filtered(session, product_code=product_code, q=q)
 
     items: list[PremiumRegisterItem] = []
     for policy in policies:
-        customer = policy.customer
-        total, lines, any_error = await _rate_policy(session, policy, customer)
+        insured = _insured_party(policy)
+        total, lines, any_error = await _rate_policy(session, policy, insured)
         codes = [cov.product.code for cov in policy.coverages]
         items.append(
             PremiumRegisterItem(
                 policy_id=policy.id,
                 policy_number=policy.policy_number,
-                customer_id=customer.id,
-                insured_name=customer.full_name,
+                party_id=insured.id if insured else 0,
+                insured_name=insured.full_name if insured else "—",
                 effective_date=policy.effective_date,
                 products=_product_summary(codes),
                 coverage_count=len(codes),
@@ -132,7 +144,6 @@ async def premium_register(
             )
         )
 
-    # Highest premium first — the collections-oriented default.
     items.sort(key=lambda it: it.premium_due, reverse=True)
     total_outstanding = sum((it.premium_due for it in items), _ZERO)
 

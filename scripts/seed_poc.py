@@ -5,25 +5,22 @@ Run from the repo root after `alembic upgrade head`:
     uv run python -m scripts.seed_poc
 
 Seeds a base term-life product (loaded from the real Premium Table xlsx), a
-rider product with a small synthetic rate table, and a handful of customers and
-policies — including a customer holding the same base product on two policies
-with different riders, and one customer whose age falls outside the rate table.
+rider product with a small synthetic rate table, and a handful of parties +
+policies — including a party holding the same base product on two policies with
+different riders, and one whose age falls outside the rate table. Each seeded
+policy gives its party both the owner and insured roles.
 """
 import asyncio
 from datetime import date
 from decimal import Decimal
 
-from domain.customer.model import Customer
-from domain.policy.model import Policy, PolicyCoverage
+from domain.party.model import Party
+from domain.policy.model import Policy, PolicyRole
 from domain.product.model import Product, ProductRatingDimension
 from domain.rate.model import RateCell, RateTableVersion
-from integrations.db.repositories import (
-    customer_repo,
-    policy_repo,
-    product_repo,
-    rate_repo,
-)
+from integrations.db.repositories import party_repo, policy_repo, product_repo, rate_repo
 from integrations.db.session import async_session_factory
+from services.issuance import _build_coverage
 from services.rate_loader import load_rate_table
 from services.rating import canonical_dim_key
 
@@ -40,7 +37,7 @@ def _dims() -> list[ProductRatingDimension]:
 
 async def _seed_rider(session, product: Product) -> RateTableVersion:
     """A rider with a flat per-1000 synthetic rate over age 0–65 × M/F, so any
-    in-range customer rates. Demonstrates that riders use the same engine."""
+    in-range insured rates. Demonstrates that riders use the same engine."""
     version = await rate_repo.save_version(
         session,
         RateTableVersion(
@@ -102,58 +99,53 @@ async def seed() -> None:
         rider_version = await _seed_rider(session, rider)
         print(f"Rider rate version {rider_version.id}: {rider_version.cell_count} cells")
 
-        # --- Customers (varied DOB incl. age 0 and one out of range) ---
-        async def add_customer(ref, name, sex, dob) -> Customer:
-            return await customer_repo.save(
+        # --- Parties (varied DOB incl. age 0 and one out of range) ---
+        async def add_party(ref, name, sex, dob) -> Party:
+            return await party_repo.save(
                 session,
-                Customer(external_ref=ref, full_name=name, sex=sex, date_of_birth=dob),
+                Party(external_ref=ref, full_name=name, sex=sex, date_of_birth=dob),
             )
 
-        somchai = await add_customer("C001", "Somchai Jaidee", "M", date(1990, 5, 2))
-        anong = await add_customer("C002", "Anong Sukjai", "F", date(1976, 3, 15))
-        baby = await add_customer("C003", "Baby Noi", "M", date(2025, 7, 1))
-        elder = await add_customer("C004", "Grandpa Wit", "M", date(1955, 1, 1))
+        somchai = await add_party("C001", "Somchai Jaidee", "M", date(1990, 5, 2))
+        anong = await add_party("C002", "Anong Sukjai", "F", date(1976, 3, 15))
+        baby = await add_party("C003", "Baby Noi", "M", date(2025, 7, 1))
+        elder = await add_party("C004", "Grandpa Wit", "M", date(1955, 1, 1))
 
-        # --- Policies ---
-        async def coverage(product_code: str, sum_assured: str) -> PolicyCoverage:
-            product = await product_repo.get_by_code(session, product_code)
-            version = await rate_repo.resolve_active_version(
-                session, product.id, EFFECTIVE
-            )
-            return PolicyCoverage(
-                product_id=product.id,
-                sum_assured=Decimal(sum_assured),
-                rate_table_version_id=version.id if version else None,
+        async def coverage(product_code: str, sum_assured: str):
+            return await _build_coverage(
+                session, product_code, Decimal(sum_assured), EFFECTIVE
             )
 
-        async def make_policy(number, customer, coverages) -> None:
+        async def make_policy(party: Party, coverages) -> None:
             policy = Policy(
-                policy_number=number,
-                customer_id=customer.id,
+                policy_number=await policy_repo.next_policy_number(session),
                 effective_date=EFFECTIVE,
                 status="active",
             )
             policy.coverages = coverages
+            # Seed: the party both owns and is insured on their policy.
+            policy.roles = [
+                PolicyRole(party_id=party.id, role="owner"),
+                PolicyRole(party_id=party.id, role="insured"),
+            ]
             await policy_repo.save_policy(session, policy)
 
         # Somchai holds the SAME base product on two policies, different riders.
         await make_policy(
-            "P-0001",
             somchai,
             [await coverage("TERM_LIFE_1", "500000"), await coverage("ADB_RIDER", "200000")],
         )
         await make_policy(
-            "P-0002",
             somchai,
             [await coverage("TERM_LIFE_1", "1000000"), await coverage("ADB_RIDER", "300000")],
         )
-        await make_policy("P-0003", anong, [await coverage("TERM_LIFE_1", "800000")])
-        await make_policy("P-0004", baby, [await coverage("TERM_LIFE_1", "100000")])
+        await make_policy(anong, [await coverage("TERM_LIFE_1", "800000")])
+        await make_policy(baby, [await coverage("TERM_LIFE_1", "100000")])
         # Grandpa Wit is 71 at the effective date — out of the 0–65 table range.
-        await make_policy("P-0005", elder, [await coverage("TERM_LIFE_1", "100000")])
+        await make_policy(elder, [await coverage("TERM_LIFE_1", "100000")])
 
         await session.commit()
-        print("Seed complete: 2 products, 4 customers, 5 policies.")
+        print("Seed complete: 2 products, 4 parties, 5 policies.")
 
 
 if __name__ == "__main__":

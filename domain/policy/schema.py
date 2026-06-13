@@ -3,17 +3,22 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from domain.party.schema import PartyRef
 
-class CoverageCreate(BaseModel):
+
+class CoverageInput(BaseModel):
     product_code: str
     sum_assured: Decimal
 
 
-class PolicyCreate(BaseModel):
-    policy_number: str = Field(min_length=1, max_length=32)
-    customer_id: int
+class PolicyIssueRequest(BaseModel):
+    """New Business → Issue. Each party is inline create-or-pick (see PartyRef)."""
+
     effective_date: date
-    coverages: list[CoverageCreate] = Field(default_factory=list)
+    owner: PartyRef
+    insured: PartyRef
+    beneficiary: PartyRef | None = None
+    coverages: list[CoverageInput] = Field(min_length=1)
 
 
 class CoverageOut(BaseModel):
@@ -25,19 +30,27 @@ class CoverageOut(BaseModel):
     rate_table_version_id: int | None = None
 
 
+class PolicyRoleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    party_id: int
+    role: str
+    party_name: str
+    allocation_pct: Decimal | None = None
+
+
 class PolicyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     policy_number: str
-    customer_id: int
     effective_date: date
     status: str
     coverages: list[CoverageOut] = Field(default_factory=list)
+    roles: list[PolicyRoleOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
 
-# --- Premium-due rollup (customer → policies → coverages) ---
+# --- Premium-due rollup (party → policies → coverages) ---
 
 
 class PremiumDueCoverageLine(BaseModel):
@@ -58,11 +71,25 @@ class PremiumDuePolicy(BaseModel):
     coverages: list[PremiumDueCoverageLine] = Field(default_factory=list)
 
 
-class CustomerPremiumDue(BaseModel):
-    customer_id: int
+class PartyPremiumDue(BaseModel):
+    party_id: int
     full_name: str
     total_due: Decimal
     policies: list[PremiumDuePolicy] = Field(default_factory=list)
+
+
+# --- Application quote (pre-issue; persists nothing) ---
+
+
+class ApplicationQuoteRequest(BaseModel):
+    effective_date: date
+    insured: PartyRef
+    coverages: list[CoverageInput] = Field(min_length=1)
+
+
+class ApplicationQuoteResult(BaseModel):
+    total: Decimal
+    coverages: list[PremiumDueCoverageLine] = Field(default_factory=list)
 
 
 # --- Premium register (portfolio worklist: one row per policy) ---
@@ -71,7 +98,7 @@ class CustomerPremiumDue(BaseModel):
 class PremiumRegisterItem(BaseModel):
     policy_id: int
     policy_number: str
-    customer_id: int
+    party_id: int
     insured_name: str
     effective_date: date
     products: str

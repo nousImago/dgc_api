@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # Insurance core domain
-import domain.customer.model  # noqa: F401
+import domain.party.model  # noqa: F401
 
 # Import all domain models so SQLAlchemy's mapper can resolve every
 # relationship and association table before the first query runs. Add each

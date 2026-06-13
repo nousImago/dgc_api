@@ -1,8 +1,9 @@
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-import domain.customer.model  # noqa: F401
+import domain.party.model  # noqa: F401
 import domain.permission.model  # noqa: F401
 import domain.policy.model  # noqa: F401
 import domain.product.model  # noqa: F401
@@ -26,6 +27,8 @@ async def session() -> AsyncSession:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+        # Sequence is created by a migration (not metadata); tests use create_all.
+        await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS policy_number_seq"))
 
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as s:

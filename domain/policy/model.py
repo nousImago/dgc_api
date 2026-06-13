@@ -2,40 +2,90 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domain.base import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from domain.customer.model import Customer
+    from domain.party.model import Party
     from domain.product.model import Product
     from domain.rate.model import RateTableVersion
 
 
 class Policy(IdMixin, TimestampMixin, Base):
-    """The contract a customer buys — one policy number, one effective date.
-    Bundles one or more coverages (a base plan + optional riders). A customer
-    may hold the same base product on multiple policies."""
+    """The contract — one policy number, one effective date. Bundles one or more
+    coverages (a base plan + optional riders). Parties relate to the policy via
+    `roles` (owner / insured / beneficiary); rating reads the *insured*."""
 
     __tablename__ = "policies"
 
     policy_number: Mapped[str] = mapped_column(
         String(32), unique=True, nullable=False, index=True
     )
-    customer_id: Mapped[int] = mapped_column(
-        ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
 
-    customer: Mapped["Customer"] = relationship(back_populates="policies")
     coverages: Mapped[list["PolicyCoverage"]] = relationship(
         back_populates="policy",
         lazy="selectin",
         order_by="PolicyCoverage.id",
         cascade="all, delete-orphan",
     )
+    roles: Mapped[list["PolicyRole"]] = relationship(
+        back_populates="policy",
+        lazy="selectin",
+        order_by="PolicyRole.id",
+        cascade="all, delete-orphan",
+    )
+
+
+class PolicyRole(IdMixin, TimestampMixin, Base):
+    """Links a party to a policy in a role. The same party can hold different
+    roles across policies. One owner + one insured per policy (enforced by a
+    partial unique index); beneficiaries may repeat."""
+
+    __tablename__ = "policy_roles"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('owner','insured','beneficiary')", name="role_valid"
+        ),
+        # One owner and one insured per policy; beneficiaries excluded so they
+        # can repeat (future multi-beneficiary).
+        Index(
+            "uq_policy_role_singleton",
+            "policy_id",
+            "role",
+            unique=True,
+            postgresql_where=text("role IN ('owner','insured')"),
+        ),
+    )
+
+    policy_id: Mapped[int] = mapped_column(
+        ForeignKey("policies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    party_id: Mapped[int] = mapped_column(
+        ForeignKey("parties.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    allocation_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+
+    policy: Mapped["Policy"] = relationship(back_populates="roles")
+    party: Mapped["Party"] = relationship(lazy="selectin")
+
+    @property
+    def party_name(self) -> str:
+        # party is selectin-loaded, so this is a safe sync read at serialize time.
+        return self.party.full_name if self.party else ""
 
 
 class PolicyCoverage(IdMixin, TimestampMixin, Base):
