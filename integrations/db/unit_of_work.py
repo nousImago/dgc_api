@@ -7,14 +7,13 @@ class UnitOfWork:
     """Explicit transaction boundary for multi-repository operations.
 
     Use when a single business operation touches multiple aggregates and must
-    commit atomically (e.g., approving finance updates a job, creates invoice,
-    and credits coin history in one transaction).
+    commit atomically (e.g., issuing a policy creates the policy contract and
+    its base + rider coverages in one transaction).
 
         async with UnitOfWork() as uow:
-            job = await job_auto_repo.get(uow.session, job_number)
-            job.finance_status = "approved"
-            await job_auto_repo.save(uow.session, job)
-            await invoice_repo.create(uow.session, invoice)
+            policy = await policy_repo.save_policy(uow.session, policy)
+            for coverage in coverages:
+                await policy_repo.save_coverage(uow.session, coverage)
         # commits on successful exit, rolls back on exception
     """
 

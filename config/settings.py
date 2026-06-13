@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from config.database import DatabaseSettings
 from config.email import EmailSettings
 from config.jwt import JWTSettings
-from config.line_notify import LineNotifySettings
 from config.storage import S3Settings
 
 
@@ -31,7 +30,6 @@ class Settings:
 
         self.database = DatabaseSettings()
         self.jwt = JWTSettings()
-        self.line_notify = LineNotifySettings()
         self.email = EmailSettings()
         self.storage = S3Settings()
 

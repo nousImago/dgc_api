@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -9,7 +9,7 @@ from observability.exceptions import UnauthorizedError
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _next_local_midnight_utc(now_utc: datetime) -> datetime:
@@ -24,7 +24,7 @@ def _next_local_midnight_utc(now_utc: datetime) -> datetime:
     next_midnight_local = datetime.combine(
         local_now.date() + timedelta(days=1), time(0, 0), tzinfo=tz
     )
-    return next_midnight_local.astimezone(timezone.utc)
+    return next_midnight_local.astimezone(UTC)
 
 
 def _expiry(now_utc: datetime, ttl_minutes: int) -> datetime:

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +34,7 @@ async def login(
     if not security.verify_password(password, user.password_hash):
         raise UnauthorizedError("Invalid username or password")
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     await user_repo.save(session, user)
 
     access_token = jwt_service.encode_access_token(user.id)
