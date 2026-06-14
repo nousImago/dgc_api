@@ -68,3 +68,15 @@ class RecordPaymentInput(BaseModel):
     method: str = "transfer"
     reference_no: str | None = None
     notes: str | None = None
+
+
+class PremiumDayBucket(BaseModel):
+    date: date
+    base: Decimal
+    rider: Decimal
+    total: Decimal
+
+
+class PremiumDailySchedule(BaseModel):
+    week_start: date  # Monday of the selected week
+    days: list[PremiumDayBucket]  # 7 buckets, Mon→Sun

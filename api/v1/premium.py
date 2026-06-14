@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +9,7 @@ from domain.billing.schema import (
     DueItemsPage,
     PaymentRecord,
     PaymentsPage,
+    PremiumDailySchedule,
     RecordPaymentInput,
 )
 from domain.user.model import User
@@ -44,6 +47,20 @@ async def due_items(
 async def collections_summary(db: AsyncSession = Depends(get_db)) -> CollectionsSummary:
     """KPI tiles — served from the latest materialized collections snapshot."""
     return await premium_servicing.collections_summary(db)
+
+
+@router.get(
+    "/daily",
+    response_model=PremiumDailySchedule,
+    dependencies=[Depends(has_permission("policy.read"))],
+)
+async def daily(
+    week_start: date | None = None, db: AsyncSession = Depends(get_db)
+) -> PremiumDailySchedule:
+    """Premium due per day for the selected week (defaults to the current week's
+    Monday). Read from the stored schedule."""
+    ws = week_start or (date.today() - timedelta(days=date.today().weekday()))
+    return await premium_servicing.daily_schedule(db, ws)
 
 
 @router.get(

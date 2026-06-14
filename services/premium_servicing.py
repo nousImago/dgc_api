@@ -17,6 +17,8 @@ from domain.billing.schema import (
     DueItemsPage,
     PaymentRecord,
     PaymentsPage,
+    PremiumDailySchedule,
+    PremiumDayBucket,
     RecordPaymentInput,
 )
 from domain.policy.model import Policy
@@ -164,6 +166,29 @@ async def due_items(
         page_size=page_size,
         items=[_due_item(r, today) for r in rows],
     )
+
+
+async def daily_schedule(
+    session: AsyncSession, week_start: date
+) -> PremiumDailySchedule:
+    """Premium due per day for the selected week (Mon→Sun), read from the stored
+    schedule. Empty days fill with zero."""
+    week_end = week_start + timedelta(days=7)
+    rows = await billing_repo.daily_due(session, week_start, week_end)
+    by_day = {r[0]: r for r in rows}
+    days = []
+    for i in range(7):
+        d = week_start + timedelta(days=i)
+        r = by_day.get(d)
+        days.append(
+            PremiumDayBucket(
+                date=d,
+                base=r[1] if r else _ZERO,
+                rider=r[2] if r else _ZERO,
+                total=r[3] if r else _ZERO,
+            )
+        )
+    return PremiumDailySchedule(week_start=week_start, days=days)
 
 
 async def collections_summary(session: AsyncSession) -> CollectionsSummary:

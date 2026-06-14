@@ -300,3 +300,22 @@ async def list_forecast(session: AsyncSession) -> list[PremiumForecast]:
         select(PremiumForecast).order_by(PremiumForecast.bucket_month)
     )
     return list(result.scalars().all())
+
+
+async def daily_due(session: AsyncSession, week_start: date, week_end: date) -> list:
+    """Sum scheduled premium by due_date within [week_start, week_end). A narrow
+    live aggregation over the stored schedule (no re-rating); grouping on the
+    Date column directly is timezone-safe."""
+    d = PremiumSchedule.due_date
+    stmt = (
+        select(
+            d.label("d"),
+            func.sum(PremiumSchedule.base_amount),
+            func.sum(PremiumSchedule.rider_amount),
+            func.sum(PremiumSchedule.total_amount),
+        )
+        .where(and_(d >= week_start, d < week_end))
+        .group_by(d)
+        .order_by(d)
+    )
+    return list((await session.execute(stmt)).all())
