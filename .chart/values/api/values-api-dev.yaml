@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: harbor.postway.co.th/dgc-develop/dgcstore/api
+  repository: harbor.postway.co.th/cardinal-develop/dgcstore/api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -108,7 +108,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1024m"
   hosts:
-    - host: dev.dgcstore.com
+    - host: dev.tench.ai
       paths:
         - /api(/|$)(.*)
 
@@ -145,5 +145,5 @@ fluentbit:
   image: "harbor.postway.co.th/dgc/fluent/fluent-bit:3.1"
   logBucket: "dgcdev-log"
   minioEndpoint: "storage-hq.postway.co.th"
-  minioAccessKey: "REPLACE_WITH_MINIO_ACCESS_KEY"
-  minioSecretKey: "REPLACE_WITH_MINIO_SECRET_KEY"
+  minioAccessKey: "qkwMyXqTflZ0l4RbtWvX"
+  minioSecretKey: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"

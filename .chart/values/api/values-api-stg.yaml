@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: harbor.postway.co.th/dgc-staging/dgcstore/api
+  repository: harbor.postway.co.th/cardinal-staging/dgcstore/api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -105,7 +105,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1024m"
   hosts:
-    - host: stg.dgcstore.com
+    - host: stg.tench.ai
       paths:
         - /api(/|$)(.*)
 
