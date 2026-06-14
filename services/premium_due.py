@@ -15,9 +15,11 @@ from domain.policy.schema import (
     PremiumRegisterItem,
     PremiumRegisterPage,
 )
-from integrations.db.repositories import party_repo, policy_repo
+from integrations.db.repositories import billing_repo, party_repo, policy_repo
 from observability.exceptions import DGCError, NotFoundError
 from services import rating
+
+_OUTSTANDING = ("due", "partially_paid", "pending_verification")
 
 _ZERO = Decimal("0.00")
 
@@ -111,6 +113,27 @@ def _product_summary(codes: list[str]) -> str:
     return codes[0] + (f" +{len(codes) - 1}" if len(codes) > 1 else "")
 
 
+def _aggregate_status(scheds: list, today: date) -> str | None:
+    """The policy-level status for the register: the most urgent across its dues."""
+    if not scheds:
+        return None
+    states = [
+        "overdue" if (s.status == "due" and s.due_date < today) else s.status
+        for s in scheds
+    ]
+    for pref in ("overdue", "pending_verification", "partially_paid", "due"):
+        if pref in states:
+            return pref
+    return "paid" if "paid" in states else states[0]
+
+
+def _representative(scheds: list):
+    """The due that drives the register row — the earliest outstanding, else the
+    earliest overall."""
+    pool = [s for s in scheds if s.status in _OUTSTANDING] or scheds
+    return min(pool, key=lambda s: s.due_date)
+
+
 async def premium_register(
     session: AsyncSession,
     *,
@@ -119,40 +142,65 @@ async def premium_register(
     product_code: str | None = None,
     q: str | None = None,
 ) -> PremiumRegisterPage:
-    """Portfolio-wide premium register: one row per policy with the premium due,
-    plus portfolio totals. Premium is computed live, so the full filtered set is
-    rated, summed, and sorted in Python before paging (see
-    policy_repo.list_filtered for the production materialisation note)."""
+    """Portfolio-wide premium register — one row per policy, read from the stored
+    `premium_schedule` (§3.2 store-and-serve; no re-rating). Each row carries the
+    representative due's amounts + next due date + aggregate status + the policy's
+    outstanding (billed-minus-paid). Policies with no schedule (uninsurable) show
+    has_error."""
     page = max(page, 1)
     page_size = max(min(page_size, 200), 1)
+    today = date.today()
 
     policies = await policy_repo.list_filtered(session, product_code=product_code, q=q)
 
     items: list[PremiumRegisterItem] = []
     for policy in policies:
         insured = _insured_party(policy)
-        total, lines, any_error = await _rate_policy(session, policy, insured)
-        base, rider = _base_rider(lines)
         codes = [cov.product.code for cov in policy.coverages]
+        scheds = await billing_repo.list_schedule_for_policy(session, policy.id)
+        common = dict(
+            policy_id=policy.id,
+            policy_number=policy.policy_number,
+            party_id=insured.id if insured else 0,
+            insured_name=insured.full_name if insured else "—",
+            effective_date=policy.effective_date,
+            products=_product_summary(codes),
+            coverage_count=len(codes),
+        )
+        if not scheds:
+            items.append(
+                PremiumRegisterItem(
+                    **common,
+                    base_premium=_ZERO,
+                    rider_premium=_ZERO,
+                    premium_due=_ZERO,
+                    has_error=True,
+                    due_date=None,
+                    status=None,
+                    outstanding=_ZERO,
+                )
+            )
+            continue
+        rep = _representative(scheds)
+        outstanding = sum(
+            (s.total_amount - s.paid_amount for s in scheds if s.status in _OUTSTANDING),
+            _ZERO,
+        )
         items.append(
             PremiumRegisterItem(
-                policy_id=policy.id,
-                policy_number=policy.policy_number,
-                party_id=insured.id if insured else 0,
-                insured_name=insured.full_name if insured else "—",
-                effective_date=policy.effective_date,
-                products=_product_summary(codes),
-                coverage_count=len(codes),
-                base_premium=base,
-                rider_premium=rider,
-                premium_due=total,
-                has_error=any_error,
-                coverages=lines,
+                **common,
+                base_premium=rep.base_amount,
+                rider_premium=rep.rider_amount,
+                premium_due=rep.total_amount,
+                has_error=False,
+                due_date=rep.due_date,
+                status=_aggregate_status(scheds, today),
+                outstanding=outstanding,
             )
         )
 
     items.sort(key=lambda it: it.premium_due, reverse=True)
-    total_outstanding = sum((it.premium_due for it in items), _ZERO)
+    total_outstanding = sum((it.outstanding or _ZERO for it in items), _ZERO)
 
     start = (page - 1) * page_size
     return PremiumRegisterPage(
@@ -172,74 +220,41 @@ def _add_months(d: date, months: int) -> date:
     return date(year, month, day)
 
 
-def _anniversary_in(effective: date, start: date, end: date) -> date | None:
-    """The policy's annual payment date (the effective-date anniversary) falling
-    in [start, end), if any. For a window <= 12 months there is at most one."""
-    for year in range(start.year, end.year + 2):
-        day = min(effective.day, calendar.monthrange(year, effective.month)[1])
-        d = date(year, effective.month, day)
-        if start <= d < end:
-            return d
-    return None
-
-
 def _base_rider(lines: list[PremiumDueCoverageLine]) -> tuple[Decimal, Decimal]:
     base = sum((ln.premium for ln in lines if ln.kind == "base" and ln.premium), _ZERO)
     rider = sum((ln.premium for ln in lines if ln.kind == "rider" and ln.premium), _ZERO)
     return base, rider
 
 
-def _month_index(d: date, start: date) -> int:
-    """Whole months from `start` to `d` (start is the first of a month)."""
-    return (d.year - start.year) * 12 + (d.month - start.month)
-
-
 async def premium_due_schedule(
     session: AsyncSession, as_of: date
 ) -> PremiumDueSchedule:
-    """Premium due **per month**, base/rider/total. Each policy's full annual
-    premium lands in the month its payment date (effective-date anniversary)
-    falls in. Two 12-month views: a rolling window (last 6 + next 6 months) and
-    the calendar year."""
-    policies = await policy_repo.list_filtered(session)
+    """Premium due **per month** (base/rider/total), read from the materialized
+    `premium_forecast` rollup (§3.2 store-and-serve; batch-refreshed, not live).
+    Two 12-month windows sliced from the stored month buckets: a rolling window
+    (last 6 + next 6 months) and the calendar year."""
+    rows = await billing_repo.list_forecast(session)
+    by_month = {r.bucket_month: r for r in rows}
+
+    def window(start: date) -> list[PremiumMonthBucket]:
+        out = []
+        for i in range(12):
+            month = _add_months(start, i)
+            r = by_month.get(month)
+            out.append(
+                PremiumMonthBucket(
+                    month=month,
+                    base=r.base_amount if r else _ZERO,
+                    rider=r.rider_amount if r else _ZERO,
+                    total=r.total_amount if r else _ZERO,
+                )
+            )
+        return out
 
     rolling_start = _add_months(date(as_of.year, as_of.month, 1), -6)
-    rolling_end = _add_months(rolling_start, 12)
     calendar_start = date(as_of.year, 1, 1)
-    calendar_end = date(as_of.year + 1, 1, 1)
-
-    rolling = [[_ZERO, _ZERO] for _ in range(12)]
-    calendar = [[_ZERO, _ZERO] for _ in range(12)]
-
-    for policy in policies:
-        insured = _insured_party(policy)
-        _, lines, _ = await _rate_policy(session, policy, insured)
-        base, rider = _base_rider(lines)
-
-        pay_r = _anniversary_in(policy.effective_date, rolling_start, rolling_end)
-        if pay_r is not None:
-            i = _month_index(pay_r, rolling_start)
-            rolling[i][0] += base
-            rolling[i][1] += rider
-
-        pay_c = _anniversary_in(policy.effective_date, calendar_start, calendar_end)
-        if pay_c is not None:
-            calendar[pay_c.month - 1][0] += base
-            calendar[pay_c.month - 1][1] += rider
-
-    def buckets(start: date, arr: list[list[Decimal]]) -> list[PremiumMonthBucket]:
-        return [
-            PremiumMonthBucket(
-                month=_add_months(start, i),
-                base=arr[i][0],
-                rider=arr[i][1],
-                total=arr[i][0] + arr[i][1],
-            )
-            for i in range(12)
-        ]
-
     return PremiumDueSchedule(
         as_of=as_of,
-        rolling=buckets(rolling_start, rolling),
-        calendar=buckets(calendar_start, calendar),
+        rolling=window(rolling_start),
+        calendar=window(calendar_start),
     )

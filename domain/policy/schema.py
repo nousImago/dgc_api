@@ -108,6 +108,11 @@ class PremiumRegisterItem(BaseModel):
     premium_due: Decimal
     has_error: bool
     coverages: list[PremiumDueCoverageLine] = Field(default_factory=list)
+    # Servicing fields read from the stored premium_schedule (§3.2). None when a
+    # policy has no schedule (e.g. uninsurable).
+    due_date: date | None = None
+    status: str | None = None
+    outstanding: Decimal | None = None
 
 
 class PremiumRegisterPage(BaseModel):

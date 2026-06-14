@@ -44,6 +44,18 @@ async def get_schedule(session: AsyncSession, schedule_id: int) -> PremiumSchedu
     return result.scalar_one_or_none()
 
 
+async def list_schedule_for_policy(
+    session: AsyncSession, policy_id: int
+) -> list[PremiumSchedule]:
+    """A policy's stored dues, earliest first — the register's per-policy source."""
+    result = await session.execute(
+        select(PremiumSchedule)
+        .where(PremiumSchedule.policy_id == policy_id)
+        .order_by(PremiumSchedule.due_date, PremiumSchedule.id)
+    )
+    return list(result.scalars().all())
+
+
 def _policy_match(q: str):
     """Match a schedule's policy by number or by the OWNER (payer) party name."""
     pattern = f"%{q}%"
@@ -231,17 +243,21 @@ async def collections_aggregates(
 
 
 async def forecast_buckets(session: AsyncSession) -> list:
-    """Sum scheduled premium by month — the materialized due-by-month source."""
-    month = func.date_trunc("month", PremiumSchedule.due_date)
+    """Sum scheduled premium by (year, month) — the materialized due-by-month
+    source. Grouping by extracted parts of the Date avoids the timezone shift
+    that `date_trunc` (a timestamp) introduces."""
+    year = func.extract("year", PremiumSchedule.due_date)
+    month = func.extract("month", PremiumSchedule.due_date)
     stmt = (
         select(
+            year.label("y"),
             month.label("m"),
             func.sum(PremiumSchedule.base_amount),
             func.sum(PremiumSchedule.rider_amount),
             func.sum(PremiumSchedule.total_amount),
         )
-        .group_by(month)
-        .order_by(month)
+        .group_by(year, month)
+        .order_by(year, month)
     )
     return list((await session.execute(stmt)).all())
 

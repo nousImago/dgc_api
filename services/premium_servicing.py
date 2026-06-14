@@ -201,8 +201,8 @@ async def refresh_rollups(session: AsyncSession, *, as_of: date) -> None:
     (KPIs/aging) from the stored schedule. Run from `process/refresh_rollups.py`."""
     buckets = await billing_repo.forecast_buckets(session)
     normalized = [
-        (m.date() if hasattr(m, "date") else m, base, rider, total)
-        for (m, base, rider, total) in buckets
+        (date(int(y), int(m), 1), base, rider, total)
+        for (y, m, base, rider, total) in buckets
     ]
     await billing_repo.replace_forecast(session, normalized)
 
