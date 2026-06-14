@@ -40,6 +40,12 @@ from domain.policy.model import (  # noqa: E402,F401
     PolicyCoverage,
     PolicyRole,
 )
+from domain.billing.model import (  # noqa: E402,F401
+    PremiumCollectionsSnapshot,
+    PremiumForecast,
+    PremiumPayment,
+    PremiumSchedule,
+)
 
 # Alembic Config object
 config = context.config

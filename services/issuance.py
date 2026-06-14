@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ from domain.policy.schema import (
 )
 from integrations.db.repositories import party_repo, policy_repo, product_repo, rate_repo
 from observability.exceptions import DGCError, NotFoundError, ValidationError
-from services import rating
+from services import premium_servicing, rating
 
 _ZERO = Decimal("0.00")
 
@@ -94,8 +95,13 @@ async def issue_policy(session: AsyncSession, payload: PolicyIssueRequest) -> Po
         policy.roles.append(PolicyRole(party_id=beneficiary.id, role="beneficiary"))
 
     await policy_repo.save_policy(session, policy)
-    # Re-fetch so roles→party and coverages→product are eagerly loaded for the response.
-    return await policy_repo.get_by_id(session, policy.id)
+    # Re-fetch so roles→party and coverages→product are eagerly loaded.
+    fresh = await policy_repo.get_by_id(session, policy.id)
+    # Event-driven generation: snapshot the premium schedule at issue (§3.2).
+    await premium_servicing.generate_schedule_for_policy(
+        session, fresh, as_of=date.today(), source="issue"
+    )
+    return fresh
 
 
 async def quote_application(

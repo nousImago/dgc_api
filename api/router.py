@@ -4,6 +4,7 @@ from api.v1 import (
     auth,
     parties,
     policies,
+    premium,
     premium_due,
     premium_register,
     products,
@@ -23,5 +24,6 @@ api_router.include_router(policies.router, prefix="/v1/policies", tags=["Policie
 api_router.include_router(
     premium_register.router, prefix="/v1/premium-register", tags=["Premium Register"]
 )
+api_router.include_router(premium.router, prefix="/v1/premium", tags=["Premium"])
 api_router.include_router(quotes.router, prefix="/v1/quotes", tags=["Quotes"])
 api_router.include_router(search.router, prefix="/v1/search", tags=["Search"])
