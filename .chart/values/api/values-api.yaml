@@ -137,3 +137,11 @@ affinity: {}
 migration:
   enabled: false  # ตั้งเป็น false ถ้ายังไม่อยากให้รัน Database Migration Job
                   # หรือตั้งเป็น true ถ้าต้องการให้ Job ทำงาน
+
+fluentbit:
+  enabled: true   #  เป็น true เพื่อเปิดใช้งาน
+  image: "harbor.postway.co.th/cardinal/fluent/fluent-bit:3.1"
+  logBucket: "cardinal-log"
+  minioEndpoint: "storage-hq.postway.co.th"
+  minioAccessKey: "qkwMyXqTflZ0l4RbtWvX"
+  minioSecretKey: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
