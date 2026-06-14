@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: harbor.postway.co.th/dgc-staging/dgcstore/api
+  repository: harbor.postway.co.th/cardinal-staging/dgcstore/api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -13,52 +13,6 @@ image:
 envs:
   - name: TZ
     value: "Asia/Bangkok"
-
-#----------DGC DATABASE----------
-  - name: DGC_DB_HOST
-    value: "dev.postway.co.th"
-  - name: DGC_DB_PORT
-    value: "61803"
-  - name: DGC_DB_USER
-    value: "dgc"
-  - name: DGC_DB_PASS
-    value: "dgc0nCl0ucl"
-  - name: DGC_DB_NAME
-    value: "dgcstore_dev"
-  - name: DGC_DB_SCHEMA
-    value: "public"
-  - name: DATABASE_URL
-    value: "postgresql+asyncpg://dgc:dgc0nCl0ucl@dev.postway.co.th:61803/dgcstore_dev"
-
-#----------JWT----------
-  - name: JWT_SECRET
-    value: "stg-secret-change-me-in-prod"
-
-#----------MINIO----------
-  - name: MINIO_ENDPOINT
-    value: "storage-hq.postway.co.th"
-  - name: MINIO_ACCESS_KEY
-    value: "REPLACE_WITH_MINIO_ACCESS_KEY"
-  - name: MINIO_SECRET_KEY
-    value: "REPLACE_WITH_MINIO_SECRET_KEY"
-  - name: MINIO_BUCKET_NAME
-    value: "dgcstg"
-
-#----------EMAIL (Gmail / Google Workspace)----------
-# Generate an app password at https://myaccount.google.com/apppasswords
-# (regular Gmail passwords won't work with SMTP).
-  - name: SMTP_HOST
-    value: "smtp.gmail.com"
-  - name: SMTP_PORT
-    value: "587"
-  - name: SMTP_USER
-    value: "info@dgcfilm.com"
-  - name: SMTP_PASSWORD
-    value: "REPLACE_WITH_GOOGLE_APP_PASSWORD"   # TODO: paste the 16-char Google app password here before deploy
-  - name: SMTP_FROM
-    value: "DGC Service<info@dgcfilm.com>"
-  - name: SMTP_USE_TLS
-    value: "true"
 
 
 imagePullSecrets:
@@ -90,7 +44,7 @@ securityContext: {}
   # runAsUser: 1000
 
 service:
-  type: NodePort
+  type: ClusterIP
   port: 8000
 
 ingress:
@@ -105,7 +59,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1024m"
   hosts:
-    - host: stg.dgcstore.com
+    - host: stg.tench.ai
       paths:
         - /api(/|$)(.*)
 
@@ -133,3 +87,7 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+migration:
+  enabled: false  # ตั้งเป็น false ถ้ายังไม่อยากให้รัน Database Migration Job
+                  # หรือตั้งเป็น true ถ้าต้องการให้ Job ทำงาน

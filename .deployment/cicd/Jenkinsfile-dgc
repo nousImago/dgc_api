@@ -167,16 +167,16 @@ podTemplate(cloud: cloudName, containers: [
                         script {
                             try {
                                 if (mode == 'develop') {
-                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    image = "${preImage}/cardinal-develop${preImage2}"
                                     tag = tagName
                                 } else if (mode == 'staging') {
-                                    image = "${preImage}/dgc-staging${preImage2}"
+                                    image = "${preImage}/cardinal-staging${preImage2}"
                                     tag = tagName
                                 } else if (mode == 'production') {
-                                    image = "${preImage}/dgc${preImage2}"
+                                    image = "${preImage}/cardinal${preImage2}"
                                     // tag ถูกกำหนดไว้แล้วในขั้นตอน git clone
                                 } else {
-                                    image = "${preImage}/dgc-develop${preImage2}"
+                                    image = "${preImage}/cardinal-develop${preImage2}"
                                     tag = tagName
                                 }
 

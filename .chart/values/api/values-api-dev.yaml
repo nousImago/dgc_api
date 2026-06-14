@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: harbor.postway.co.th/dgc-develop/dgcstore/api
+  repository: harbor.postway.co.th/cardinal-develop/dgcstore/api
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
@@ -14,21 +14,21 @@ envs:
   - name: TZ
     value: "Asia/Bangkok"
 
-#----------DGC DATABASE----------
+#----------CARDINAL DATABASE----------
   - name: DGC_DB_HOST
     value: "dev.postway.co.th"
   - name: DGC_DB_PORT
     value: "61803"
   - name: DGC_DB_USER
-    value: "dgc"
+    value: "cardinal"
   - name: DGC_DB_PASS
-    value: "dgc0nCl0ucl"
+    value: "cardinal0nCl0ucl"
   - name: DGC_DB_NAME
-    value: "dgcstore_dev"
+    value: "dgc_dev"
   - name: DGC_DB_SCHEMA
     value: "public"
   - name: DATABASE_URL
-    value: "postgresql+asyncpg://dgc:dgc0nCl0ucl@dev.postway.co.th:61803/dgcstore_dev"
+    value: "postgresql+asyncpg://cardinal:cardinal0nCl0ucl@dev.postway.co.th:61803/dgc_dev"
 
 #----------JWT----------
   - name: JWT_SECRET
@@ -40,13 +40,13 @@ envs:
   - name: MINIO_ENDPOINT
     value: "storage-hq.postway.co.th"
   - name: MINIO_ACCESS_KEY
-    value: "REPLACE_WITH_MINIO_ACCESS_KEY"
+    value: "qkwMyXqTflZ0l4RbtWvX"
   - name: MINIO_SECRET_KEY
-    value: "REPLACE_WITH_MINIO_SECRET_KEY"
+    value: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
   - name: MINIO_BUCKET_NAME
-    value: "dgcdev"
+    value: "cardinaldev"
   - name: MINIO_BUCKET_LOG
-    value: "dgcdev-log"
+    value: "cardinaldev-log"
 
 #----------EMAIL (Gmail / Google Workspace)----------
 # Generate an app password at https://myaccount.google.com/apppasswords
@@ -56,11 +56,11 @@ envs:
   - name: SMTP_PORT
     value: "587"
   - name: SMTP_USER
-    value: "info@dgcfilm.com"
+    value: "info@cardinalfilm.com"
   - name: SMTP_PASSWORD
-    value: "REPLACE_WITH_GOOGLE_APP_PASSWORD"   # TODO: paste the 16-char Google app password here before deploy
+    value: "mlpt oito urlm blpv"   # TODO: paste the 16-char Google app password here before deploy
   - name: SMTP_FROM
-    value: "DGC Service <info@dgcfilm.com>"
+    value: "Cardinal Service <info@cardinalfilm.com>"
   - name: SMTP_USE_TLS
     value: "true"
 
@@ -93,7 +93,7 @@ securityContext: {}
   # runAsUser: 1000
 
 service:
-  type: NodePort
+  type: ClusterIP
   port: 8000
 
 ingress:
@@ -108,7 +108,7 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "1024m"
   hosts:
-    - host: dev.dgcstore.com
+    - host: dev.tench.ai
       paths:
         - /api(/|$)(.*)
 
@@ -140,10 +140,15 @@ tolerations: []
 
 affinity: {}
 
+migration:
+  enabled: false  # ตั้งเป็น false ถ้ายังไม่อยากให้รัน Database Migration Job
+                  # หรือตั้งเป็น true ถ้าต้องการให้ Job ทำงาน
+
 fluentbit:
   enabled: true   #  เป็น true เพื่อเปิดใช้งาน
-  image: "harbor.postway.co.th/dgc/fluent/fluent-bit:3.1"
-  logBucket: "dgcdev-log"
+  image: "harbor.postway.co.th/cardinal/fluent/fluent-bit:3.1"
+  logBucket: "cardinaldev-log"
   minioEndpoint: "storage-hq.postway.co.th"
-  minioAccessKey: "REPLACE_WITH_MINIO_ACCESS_KEY"
-  minioSecretKey: "REPLACE_WITH_MINIO_SECRET_KEY"
+  minioAccessKey: "qkwMyXqTflZ0l4RbtWvX"
+  minioSecretKey: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
+
