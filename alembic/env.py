@@ -25,6 +25,22 @@ from domain.role.model import (  # noqa: E402,F401
 )
 from domain.permission.model import Permission  # noqa: E402,F401
 
+# Insurance core domain
+from domain.party.model import Party  # noqa: E402,F401
+from domain.product.model import (  # noqa: E402,F401
+    Product,
+    ProductRatingDimension,
+)
+from domain.rate.model import (  # noqa: E402,F401
+    RateCell,
+    RateTableVersion,
+)
+from domain.policy.model import (  # noqa: E402,F401
+    Policy,
+    PolicyCoverage,
+    PolicyRole,
+)
+
 # Alembic Config object
 config = context.config
 

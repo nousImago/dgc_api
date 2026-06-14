@@ -13,10 +13,10 @@ class Permission(IdMixin, Base):
     """Seeded RBAC permission. One row per code-enforced action.
 
     Examples of codes:
-        job_auto.create
-        job_auto.approve_finance
-        invoice.void
-        leave.approve
+        product.manage
+        rate_table.load
+        policy.read
+        policy.manage
     """
 
     __tablename__ = "permissions"
