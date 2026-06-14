@@ -11,7 +11,11 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from services.security import hash_password
+# Precomputed bcrypt hash of "admin123". Inlined so this migration imports no
+# application code — migrations must stay self-contained (app code drifts and
+# isn't always importable, e.g. for `alembic heads` / `history`). Any valid
+# bcrypt hash of the password verifies, so admin/admin123 still works.
+ADMIN_PASSWORD_HASH = "$2b$12$Svjaho9DyfjbykruGuU4ROSlWDeykDCCPsXTXeeRMmzwU7jwlhiR2"
 
 # revision identifiers, used by Alembic.
 revision: str = '1caecab7bdde'
@@ -249,7 +253,7 @@ def upgrade() -> None:
             {
                 "username": "admin",
                 "full_name": "Administrator",
-                "password_hash": hash_password("admin123"),
+                "password_hash": ADMIN_PASSWORD_HASH,
                 "active": True,
             }
         ],
