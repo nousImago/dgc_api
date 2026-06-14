@@ -14,55 +14,55 @@ envs:
   - name: TZ
     value: "Asia/Bangkok"
 
-# #----------CARDINAL DATABASE----------
-#   - name: CARDINAL_DB_HOST
-#     value: "dev.postway.co.th"
-#   - name: CARDINAL_DB_PORT
-#     value: "61803"
-#   - name: CARDINAL_DB_USER
-#     value: "cardinal"
-#   - name: CARDINAL_DB_PASS
-#     value: "cardinal0nCl0ucl"
-#   - name: CARDINAL_DB_NAME
-#     value: "cardinalstore_dev"
-#   - name: CARDINAL_DB_SCHEMA
-#     value: "public"
-#   - name: DATABASE_URL
-#     value: "postgresql+asyncpg://cardinal:cardinal0nCl0ucl@dev.postway.co.th:61803/cardinalstore_dev"
+#----------CARDINAL DATABASE----------
+  - name: DGC_DB_HOST
+    value: "dev.postway.co.th"
+  - name: DGC_DB_PORT
+    value: "61803"
+  - name: DGC_DB_USER
+    value: "cardinal"
+  - name: DGC_DB_PASS
+    value: "cardinal0nCl0ucl"
+  - name: DGC_DB_NAME
+    value: "dgc_dev"
+  - name: DGC_DB_SCHEMA
+    value: "public"
+  - name: DATABASE_URL
+    value: "postgresql+asyncpg://cardinal:cardinal0nCl0ucl@dev.postway.co.th:61803/dgc_dev"
 
-# #----------JWT----------
-#   - name: JWT_SECRET
-#     value: "dev-secret-change-me-in-prod"
-#   - name: LOG_FILE
-#     value: "/var/log/app/api.log"
+#----------JWT----------
+  - name: JWT_SECRET
+    value: "dev-secret-change-me-in-prod"
+  - name: LOG_FILE
+    value: "/var/log/app/api.log"
 
-# #----------MINIO----------
-#   - name: MINIO_ENDPOINT
-#     value: "storage-hq.postway.co.th"
-#   - name: MINIO_ACCESS_KEY
-#     value: "qkwMyXqTflZ0l4RbtWvX"
-#   - name: MINIO_SECRET_KEY
-#     value: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
-#   - name: MINIO_BUCKET_NAME
-#     value: "cardinaldev"
-#   - name: MINIO_BUCKET_LOG
-#     value: "cardinaldev-log"
+#----------MINIO----------
+  - name: MINIO_ENDPOINT
+    value: "storage-hq.postway.co.th"
+  - name: MINIO_ACCESS_KEY
+    value: "qkwMyXqTflZ0l4RbtWvX"
+  - name: MINIO_SECRET_KEY
+    value: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
+  - name: MINIO_BUCKET_NAME
+    value: "cardinaldev"
+  - name: MINIO_BUCKET_LOG
+    value: "cardinaldev-log"
 
-# #----------EMAIL (Gmail / Google Workspace)----------
-# # Generate an app password at https://myaccount.google.com/apppasswords
-# # (regular Gmail passwords won't work with SMTP).
-#   - name: SMTP_HOST
-#     value: "smtp.gmail.com"
-#   - name: SMTP_PORT
-#     value: "587"
-#   - name: SMTP_USER
-#     value: "info@cardinalfilm.com"
-#   - name: SMTP_PASSWORD
-#     value: "mlpt oito urlm blpv"   # TODO: paste the 16-char Google app password here before deploy
-#   - name: SMTP_FROM
-#     value: "Cardinal Service <info@cardinalfilm.com>"
-#   - name: SMTP_USE_TLS
-#     value: "true"
+#----------EMAIL (Gmail / Google Workspace)----------
+# Generate an app password at https://myaccount.google.com/apppasswords
+# (regular Gmail passwords won't work with SMTP).
+  - name: SMTP_HOST
+    value: "smtp.gmail.com"
+  - name: SMTP_PORT
+    value: "587"
+  - name: SMTP_USER
+    value: "info@cardinalfilm.com"
+  - name: SMTP_PASSWORD
+    value: "mlpt oito urlm blpv"   # TODO: paste the 16-char Google app password here before deploy
+  - name: SMTP_FROM
+    value: "Cardinal Service <info@cardinalfilm.com>"
+  - name: SMTP_USE_TLS
+    value: "true"
 
 imagePullSecrets:
   - name: regcred

@@ -14,51 +14,51 @@ envs:
   - name: TZ
     value: "Asia/Bangkok"
 
-# #----------DGC DATABASE----------
-#   - name: DGC_DB_HOST
-#     value: "192.168.1.184"
-#   - name: DGC_DB_PORT
-#     value: "5432"
-#   - name: DGC_DB_USER
-#     value: "dgc"
-#   - name: DGC_DB_PASS
-#     value: "dgc0nCl0ucl"
-#   - name: DGC_DB_NAME
-#     value: "dgcstore"
-#   - name: DGC_DB_SCHEMA
-#     value: "public"
-#   - name: DATABASE_URL
-#     value: "postgresql+asyncpg://dgc:dgc0nCl0ucl@192.168.1.184:5432/dgcstore"
+#----------CARDINAL DATABASE----------
+  - name: DGC_DB_HOST
+    value: "192.168.1.184"
+  - name: DGC_DB_PORT
+    value: "5432"
+  - name: DGC_DB_USER
+    value: "cardinal"
+  - name: DGC_DB_PASS
+    value: "cardinal0nCl0ucl"
+  - name: DGC_DB_NAME
+    value: "cardinalstore"
+  - name: DGC_DB_SCHEMA
+    value: "public"
+  - name: DATABASE_URL
+    value: "postgresql+asyncpg://cardinal:cardinal0nCl0ucl@192.168.1.184:5432/cardinalstore"
 
-# #----------JWT----------
-#   - name: JWT_SECRET
-#     value: "prod-secret-replace-with-strong-random-value"
+#----------JWT----------
+  - name: JWT_SECRET
+    value: "prod-secret-replace-with-strong-random-value"
 
-# #----------MINIO----------
-#   - name: MINIO_ENDPOINT
-#     value: "storage-hq.postway.co.th"
-#   - name: MINIO_ACCESS_KEY
-#     value: "REPLACE_WITH_MINIO_ACCESS_KEY"
-#   - name: MINIO_SECRET_KEY
-#     value: "REPLACE_WITH_MINIO_SECRET_KEY"
-#   - name: MINIO_BUCKET_NAME
-#     value: "dgc"
+#----------MINIO----------
+  - name: MINIO_ENDPOINT
+    value: "storage-hq.postway.co.th"
+  - name: MINIO_ACCESS_KEY
+    value: "qkwMyXqTflZ0l4RbtWvX"
+  - name: MINIO_SECRET_KEY
+    value: "3TXIISJ8Rhr1dpoBluhYMGWOf6tOidkjrHqG4yhC"
+  - name: MINIO_BUCKET_NAME
+    value: "cardinal"
 
-# #----------EMAIL (Gmail / Google Workspace)----------
-# # Generate an app password at https://myaccount.google.com/apppasswords
-# # (regular Gmail passwords won't work with SMTP).
-#   - name: SMTP_HOST
-#     value: "smtp.gmail.com"
-#   - name: SMTP_PORT
-#     value: "587"
-#   - name: SMTP_USER
-#     value: "info@dgcfilm.com"
-#   - name: SMTP_PASSWORD
-#     value: "REPLACE_WITH_GOOGLE_APP_PASSWORD"   # TODO: paste the 16-char Google app password here before deploy
-#   - name: SMTP_FROM
-#     value: "DGC Service <info@dgcfilm.com>"
-#   - name: SMTP_USE_TLS
-#     value: "true"
+#----------EMAIL (Gmail / Google Workspace)----------
+# Generate an app password at https://myaccount.google.com/apppasswords
+# (regular Gmail passwords won't work with SMTP).
+  - name: SMTP_HOST
+    value: "smtp.gmail.com"
+  - name: SMTP_PORT
+    value: "587"
+  - name: SMTP_USER
+    value: "info@cardinalfilm.com"
+  - name: SMTP_PASSWORD
+    value: "mlpt oito urlm blpv"   # TODO: paste the 16-char Google app password here before deploy
+  - name: SMTP_FROM
+    value: "Cardinal Service <info@cardinalfilm.com>"
+  - name: SMTP_USE_TLS
+    value: "true"
 
 
 imagePullSecrets:
